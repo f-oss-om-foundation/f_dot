@@ -1,0 +1,17 @@
+#! /usr/bin/env ruby
+
+# frozen_string_literal: true
+
+=begin
+
+  f_dot
+
+  entry point for f_dot.
+
+  by i2097i
+
+=end
+
+require :f_dot.to_s
+
+FDot::Based::Program.startup
