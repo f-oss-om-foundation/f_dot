@@ -22,5 +22,13 @@ require "tty-prompt"
 }
 
 module FDot
+  DOMAINS = {
+    processor: 0,
+    programmer: 1,
+    user: 2
+  }
 
+  def self.state
+    Thread.main[:f_dot_state] ||= {}
+  end
 end

@@ -14,4 +14,4 @@
 
 require :f_dot.to_s
 
-FDot::Based::Program.startup
+FDot::Based::Processor.instance.run

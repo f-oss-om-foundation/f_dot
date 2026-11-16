@@ -15,24 +15,37 @@ module FDot
 
     class Variable
       attr_accessor :uuid
-      attr_accessor :program_id
+      attr_accessor :program_uuid
       attr_accessor :type
       attr_accessor :ordinal
+      attr_accessor :domain
 
-      def initialize(program_id, type, ordinal)
+      def initialize(program_uuid, type, ordinal)
         self.uuid = FDot::Based.generate_uuid
-        self.program_id = program_id
+        self.program_uuid = program_uuid
         self.type = type
         self.ordinal = ordinal
-        puts "#{__method__} #{self.label}"
+        self.domain = FDot::DOMAINS[:processor]
       end
 
       def number_key
         FDot::Based::NUMBERS[self.ordinal]
       end
 
-      def label
-        "#{self.number_key} of #{self.type}."
+      def domain_key
+        self.class.domain_key_for(self.domain)
+      end
+
+      def self.domain_key_for(domain_int)
+        FDot::DOMAINS.keys.select{|k| FDot::DOMAINS[k] == domain_int}.first
+      end
+
+      def to_s
+        "#{self.type_display}(#{self.ordinal})"
+      end
+
+      def type_display
+        self.type.to_s.gsub("dot_", "").upcase
       end
     end
   end

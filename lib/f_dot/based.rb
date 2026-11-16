@@ -43,20 +43,27 @@ module FDot
       SecureRandom.send(:uuid_v7)
     end
 
-    def self.user_space_path
+    def self.f_dot_space_path
       path = File.join(ENV["HOME"], FDot::Based::FOLDER_NAME)
       unless Dir.exist?(path)
-        puts "FileUtils.mkdir_p(#{path})"
         FileUtils.mkdir_p(path)
       end
 
       return path
     end
 
+    def self.less(message)
+      IO.popen("less -X", "w") { |f| f.puts(message) }
+    end
+
     def self.tty_prompt_select(
       display_text = "select something: ",
-      options = [{name: :some, value: :thing}]
+      options = []
     )
+      if options.nil? || options.empty?
+        puts "there is nothing here"
+        return
+      end
       FDot::Based::PROMPT.select(
         display_text,
         options,
