@@ -28,7 +28,7 @@ module FDot
         puts "loaded #{FDot.state[:program]}"
 
         loop do
-          FDot::Based::Interface.reconfigure_user_space
+          FDot::Based::Interface.reconfigure_user_space!
           # list .f_dot directory
           # Dir[
           #   File.join(FDot::Based.f_dot_space_path, "*")
@@ -54,6 +54,7 @@ module FDot
                 "select an action: ", FDot::Based::Interface.user_variable_options(variable_uuid)
               )
               if selected_variable_option == :move_to_compiler
+
                 # move for the user
                 FDot.state[:program].add_move_history(
                   FDot.state[:program].variables[variable_uuid],

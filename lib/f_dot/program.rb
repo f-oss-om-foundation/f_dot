@@ -88,13 +88,26 @@ module FDot
         self.variables.keys.shuffle
       end
 
+      # primary read of compiler contents
       def compiler_contents
+        # a variable or instruction is considered inside of
+        # compiler_contents if it is not in any of the
+        # following domains:
+        #
+        #  => :based_variable
+        #  => :f_dot_queue
+        #  => :processor
+        #
+        # note => :based_variable is not strictly a domain
+        #
+
         {
           variables: self.variables.select{|k, v|
             k != FDot.state[:based_uuid] &&
             !FDot.state[:f_dot_queue].include?(k) &&
             !FDot.state[:programmer][:variables].include?(k) &&
-            !FDot.state[:user][:variables].include?(k)
+            !FDot.state[:user][:variables].include?(k) &&
+            !self.instructions.any?{|i_uuid, i_instance| i_instance.variable_uuids.include?(k)}
           }.map{|k, v| k},
           instructions: self.instructions.select{|k, v|
             !FDot.state[:programmer][:instructions].include?(k) &&
@@ -103,72 +116,10 @@ module FDot
         }
       end
 
-      def compile!
-        # get current compiler contents
-        compiler_data = compiler_contents
-        puts compiler_data
-        return unless (compiler_data[:variables] || []).any? ||
-          (compiler_data[:instructions] || []).any?
-        compiler_variables = compiler_data[:variables].map{|v|
-          FDot.state[:program].variables[v]
-        }
-        compiler_variables.each{|v1|
-          combinable = compiler_variables.select{|v2|
-            v1.uuid != v2.uuid &&
-            v1.ordinal == v2.ordinal
-          }
-          if combinable.any?
-            new_instruction = FDot::Based::Instruction.new(self.uuid, combinable.map{|v| v.uuid})
-            FDot.state[:instructions] << new_instruction
-          end
-        }
-        compiler_instructions = compiler_data[:instructions].map{|v|
-          FDot.state[:program].instructions[v]
-        }
-        compiler_instructions.each{|i1|
-          combinable = i1.select{|i2|
-            i1.uuid != i2.uuid &&
-            i1.ordinal == i2.ordinal
-          }
-          if combinable.any?
-            FDot::Based::Instruction.create_with_combinable_instructions(
-              self.uuid,
-              combinable.map{|v| v.uuid}
-            )
-          end
-        }
-
-      end
-
-      def add_move_history(variable, move_to_domain_key)
-        move_to_domain_key = move_to_domain_key.to_sym
-
-        # remove variable uuid from current domain
-        if variable.domain_key == :processor
-          FDot.state[:f_dot_queue].delete(variable.uuid)
-        else
-          FDot.state[variable.domain_key][:variables].delete(variable.uuid)
-        end
-
-        # create a history entry
-        history[variable.uuid] ||= []
-        history[variable.uuid] << FDot::Based::History.new(
-          variable,
-          FDot::DOMAINS[move_to_domain_key]
-        )
-
-        puts history[variable.uuid].last.to_s
-
-        # add the variable to domain
-        if move_to_domain_key != :processor
-          FDot.state[move_to_domain_key][:variables] << variable.uuid
-        end
-
-        self.compile!
-      end
-
       # deal out one variable
       def move_next_variable_to(move_to_domain_key)
+        puts "todo: f_dot_queue is empty!"
+        return unless FDot.state[:f_dot_queue].any?
         # get the next var
         next_var = FDot.state[:program].variables[
           FDot.state[:f_dot_queue].delete_at(0)
@@ -177,10 +128,7 @@ module FDot
         self.add_move_history(next_var, move_to_domain_key)
       end
 
-      def build_space!
-        working_directory = FDot::Based.f_dot_space_path
-        return unless FDot.state[:f_dot_queue].nil?
-
+      def initialize_space!
         FDot::DOMAINS.each{|domain, i|
           case domain
           when :processor
@@ -202,7 +150,18 @@ module FDot
         # create a history entry for based_variable
 
         add_move_history(based_variable, based_variable.domain_key)
+      end
 
+      def build_space!
+        working_directory = FDot::Based.f_dot_space_path
+
+        initialize_space! if FDot.state[:f_dot_queue].nil?
+
+        f_dot_de_queue!
+      end
+
+      def f_dot_de_queue!
+        return unless [:programmer, :user].map{|k| FDot.state[k][:variables] }.all?{|a| a.empty?}
         # assign first round variables
         # to programmer and user domains
         FDot::Based::NUMBERS.each{|n|
@@ -210,6 +169,182 @@ module FDot
             move_next_variable_to(k)
           }
         }
+      end
+
+      def add_combine_history(instance_one, instance_two)
+        raise "cannot combine! #{instance_one.to_s} and #{instance_two.to_s}" unless [
+          instance_one.domain,
+          instance_two.domain
+        ].uniq.first == FDot::DOMAINS[:processor]
+
+        allowed_const_types = [
+          FDot::Based::Instruction,
+          FDot::Based::Variable
+        ]
+
+        const_one = instance_one.class
+        const_two = instance_two.class
+
+        allowed_intersection = (
+          allowed_const_types & [const_one, const_two]
+        )
+        puts allowed_intersection
+        unless allowed_intersection.all?{|c| allowed_const_types.map{|c| c.name}.include?(c.name)}
+          raise "invalid const(s)! #{const_one}:#{const_two}"
+        end
+        case const_one.name
+        when FDot::Based::Instruction.name
+          case const_two.name
+          when FDot::Based::Instruction.name
+            puts "combining #{FDot::Based::Instruction.name} with #{FDot::Based::Instruction.name}"
+            # todo: build this
+            puts "FDot::Based::Instruction -> FDot::Based::Instruction"
+            # def combine_with_instruction(to_combine_instruction)
+            # end
+            # todo: implement in variable class:
+
+          when FDot::Based::Variable.name
+            puts "combining #{FDot::Based::Instruction.name} with #{FDot::Based::Variable.name}"
+            # todo: build this
+            puts "FDot::Based::Instruction -> FDot::Based::Variable"
+
+            # todo: implement in variable class:
+            # def combine_with_variable(to_combine_variable)
+            # end
+          end
+        when FDot::Based::Variable.name
+          puts "here " * 111
+          puts const_two.name
+          case const_two.name
+          when FDot::Based::Instruction.name
+            puts "combining #{FDot::Based::Variable.name} with #{FDot::Based::Instruction.name}"
+            puts "FDot::Based::Variable -> FDot::Based::Instruction"
+            #
+            instance_two = instance_one.combine_with_instruction(instance_two)
+            self.compile!(instance_two.uuid)
+          when FDot::Based::Variable.name
+            puts "combining #{FDot::Based::Variable.name} with #{FDot::Based::Variable.name}"
+            puts "FDot::Based::Variable -> FDot::Based::Variable"
+            # create new instruction and add it to history and processor instructions
+            new_instruction = instance_one.combine_with_variable(instance_two)
+            self.compile!(new_instruction.uuid)
+          end
+        end
+      end
+
+      def add_move_history(variable, move_to_domain_key)
+        move_to_domain_key = move_to_domain_key.to_sym
+
+        # remove variable uuid from current domain
+        if variable.domain_key == :processor
+          FDot.state[:f_dot_queue].delete(variable.uuid)
+        else
+          FDot.state[variable.domain_key][:variables].delete(variable.uuid)
+        end
+
+        # add the variable to domain
+        if move_to_domain_key != :processor
+          FDot.state[move_to_domain_key][:variables] << variable.uuid
+        end
+
+        # create a history entry
+        history[variable.uuid] ||= []
+        history[variable.uuid] << FDot::Based::History.create_variable_history!(
+          variable,
+          FDot::DOMAINS[move_to_domain_key]
+        )
+
+        puts history[variable.uuid].last.to_s
+
+        self.compile!(variable.uuid)
+      end
+
+      def compile!(lineage_uuid)
+        raise "invalid lineage_uuid" unless history.keys.include?(lineage_uuid)
+        history_instance = history[lineage_uuid].last
+        compile_instructions!(history_instance)
+        compile_variables!(history_instance)
+      end
+
+      private
+
+      def compile_variables!(history_instance)
+        if history_instance.to_domain == FDot::DOMAINS[:processor]
+          while get_combinable_variables.any?
+            puts JSON.pretty_generate(get_combinable_variables)
+            # prompt user to choose an instruction to combine
+            to_combine_variable_uuid = FDot::Based.tty_prompt_select(
+              "combinable_variables: ",
+              get_combinable_variables.map{|variable_instance|
+                {name: variable_instance.to_s, value: variable_instance.uuid}
+              }
+            )
+            to_combine_instance = self.variables[to_combine_variable_uuid]
+            raise "invalid to_combine_instance!" if to_combine_instance.nil?
+
+            puts "listing variables combinable with #{to_combine_instance.to_s}..."
+            with_variable_uuid = FDot::Based.tty_prompt_select(
+              "combine #{to_combine_instance.to_s} with?",
+              get_variables_combinable_with(to_combine_variable_uuid).map{|variable_instance|
+                {name: variable_instance.to_s, value: variable_instance.uuid}
+              }
+            )
+            with_instance = self.variables[with_variable_uuid]
+
+            add_combine_history(to_combine_instance, with_instance)
+          end
+        end
+      end
+
+      def compile_instructions!(history_instance)
+        while get_combinable_instructions.any?
+          puts "#{__method__}"
+          puts "listing instructions to compile..."
+          to_combine_instruction_uuid = FDot::Based.tty_prompt_select(
+            "combinable_instructions: ",
+            get_combinable_instructions.map{|instruction_instance|
+              {name: instruction_instance.to_s, value: instruction_instance.uuid}
+            }
+          )
+          to_combine_instance = self.instructions[to_combine_instruction_uuid]
+          raise "invalid to_combine_instance!" if to_combine_instance.nil?
+
+          puts "listing instructions combinable with #{to_combine_instance.to_s}..."
+          with_variable_uuid = FDot::Based.tty_prompt_select(
+            "combine #{to_combine_instance.to_s} with?",
+            get_instructions_combinable_with(to_combine_instruction_uuid).map{|instruction_instance|
+              {name: instruction_instance.to_s, value: instruction_instance.uuid}
+            }
+          )
+          with_instance = self.instructions[with_variable_uuid]
+          add_combine_history(to_combine_instance, with_instance)
+        end
+      end
+
+      def get_combinable_instructions
+        compiler_contents[:instructions].select{|i_uuid|
+          get_instructions_combinable_with(i_uuid).any?
+        }.map{|i_uuid| self.instructions[i_uuid]}
+      end
+
+      def get_combinable_variables
+        compiler_contents[:variables].select{|v_uuid|
+          get_variables_combinable_with(v_uuid).any?
+        }.map{|v_uuid| self.variables[v_uuid]}
+      end
+
+      def get_instructions_combinable_with(i1_uuid)
+        compiler_contents[:instructions].select{|i2_uuid|
+          i1_uuid != i2_uuid &&
+          self.instructions[i1_uuid].ordinal == self.instructions[i2_uuid].ordinal
+        }.map{|u| self.instructions[u]}
+      end
+
+      def get_variables_combinable_with(v1_uuid)
+        compiler_contents[:variables].select{|v2_uuid|
+          v1_uuid != v2_uuid &&
+          self.variables[v1_uuid].ordinal == self.variables[v2_uuid].ordinal
+        }.map{|u| self.variables[u]}
       end
 
     end

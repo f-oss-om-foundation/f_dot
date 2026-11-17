@@ -50,7 +50,7 @@ module FDot
         }
       end
 
-      def self.reconfigure_user_space
+      def self.reconfigure_user_space!
         # clear user space
         FileUtils.rm_rf(FDot::Based.f_dot_space_path)
 

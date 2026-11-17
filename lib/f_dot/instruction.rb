@@ -31,22 +31,27 @@ module FDot
         FDot.state[:program].instructions[self.uuid] = self
       end
 
-      def self.create_with_combinable_instructions(program_uuid, combinable_instructions)
-        # todo: validate that combinable_instructions can be combined
-        distinct_variable_uuids = []
-        combinable_instructions.each{|c|}
-          distinct_variable_uuids += c.variable_uuids
-          FDot.state[:instructions].delete(c.uuid)
-          FDot.state[:program].instructions.delete(c.uuid)
-        }
-        new_instruction = FDot::Based::Instruction.new(program_uuid, distinct_variable_uuids)
-        FDot.state[:instructions] << new_instruction.uuid
-        FDot.state[:program].instructions[new_instruction.uuid] = new_instruction
-      end
-
       def ordinal
         FDot.state[:program].variables[variable_uuids.first]
       end
+
+      def domain_key
+        FDot::Based::Variable.domain_key_for(self.domain)
+      end
+
+      def to_s
+        # todo: unicodeify
+        "FDot::Based::Instruction(#{variable_uuids.map{|v| FDot.state[:program].variables[v].to_s}.join(",")})"
+      end
+
+      def combine_with_instruction(to_combine_instruction)
+        raise "implement #{self.class.name}: #{__method__}"
+      end
+
+      def combine_with_variable(to_combine_variable)
+        raise "implement #{self.class.name}: #{__method__}"
+      end
+
     end
   end
 end
