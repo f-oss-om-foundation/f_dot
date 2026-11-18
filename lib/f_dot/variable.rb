@@ -59,7 +59,7 @@ module FDot
         FDot.state[:program].history[to_combine_instruction.uuid] ||= []
         FDot.state[:program].history[to_combine_instruction.uuid] << FDot::Based::History.create_instruction_history!(
           to_combine_instruction,
-          self.domain
+          to_combine_instruction.domain
         )
 
         to_combine_instruction
@@ -74,7 +74,7 @@ module FDot
         FDot.state[:program].history[new_instruction.uuid] = []
         FDot.state[:program].history[new_instruction.uuid] << FDot::Based::History.create_instruction_history!(
           new_instruction,
-          self.domain
+          new_instruction.domain
         )
         puts FDot.state[:program].history[new_instruction.uuid].last.to_s
 

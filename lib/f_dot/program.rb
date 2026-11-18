@@ -20,10 +20,12 @@ module FDot
       attr_accessor :history
 
       def initialize
+        puts "#{self}.#{__method__}"
         self.uuid = FDot::Based.generate_uuid
         self.variables = {}
         self.instructions = {}
         self.history = {}
+
         generate_variables!
       end
 
@@ -71,6 +73,20 @@ module FDot
         ].join("\n")
       end
 
+      def ready_to_deque?
+        [:programmer, :user].map{|k| FDot.state[k].nil? ? [] : FDot.state[k][:variables] }.all?{|a| a.empty?}
+      end
+
+      def ready_to_based?
+        compile_variables = compiler_contents[:variables]
+
+        ready_to_deque? && (
+          (FDot::Based::NUMBERS.count - 1) == compile_variables.count
+        ) && !compile_variables.any?{|v_uuid|
+          self.variables[v_uuid].ordinal == self.variables[FDot.state[:based_uuid]].ordinal
+        }
+      end
+
       def get_options_for_variable_uuid(variable_uuid)
         variable_instance = self.variables[variable_uuid]
 
@@ -82,10 +98,6 @@ module FDot
           {name: :back, value: :back},
           {name: :move_to_compiler, value: :move_to_compiler}
         ]
-      end
-
-      def issue_variables!
-        self.variables.keys.shuffle
       end
 
       # primary read of compiler contents
@@ -118,8 +130,8 @@ module FDot
 
       # deal out one variable
       def move_next_variable_to(move_to_domain_key)
-        puts "todo: f_dot_queue is empty!"
         return unless FDot.state[:f_dot_queue].any?
+
         # get the next var
         next_var = FDot.state[:program].variables[
           FDot.state[:f_dot_queue].delete_at(0)
@@ -128,47 +140,12 @@ module FDot
         self.add_move_history(next_var, move_to_domain_key)
       end
 
-      def initialize_space!
-        FDot::DOMAINS.each{|domain, i|
-          case domain
-          when :processor
-            FDot.state[:f_dot_queue] ||= self.issue_variables!
-            FDot.state[:instructions] ||= []
-          when :programmer, :user
-            FDot.state[domain] ||= {}
-            FDot.state[domain][:variables] ||= []
-            FDot.state[domain][:instructions] ||= []
-          end
-        }
-
-        based_variable = FDot.state[:program].variables[
-          FDot.state[:f_dot_queue].delete_at(0)
-        ]
-        puts "the based variable is #{based_variable.to_s}"
-        # based_variable sets the tone for the process
-        FDot.state[:based_uuid] = based_variable.uuid
-        # create a history entry for based_variable
-
-        add_move_history(based_variable, based_variable.domain_key)
-      end
-
       def build_space!
-        working_directory = FDot::Based.f_dot_space_path
-
-        initialize_space! if FDot.state[:f_dot_queue].nil?
+        initialize_space!
 
         f_dot_de_queue!
-      end
 
-      def f_dot_de_queue!
-        return unless [:programmer, :user].map{|k| FDot.state[k][:variables] }.all?{|a| a.empty?}
-        # assign first round variables
-        # to programmer and user domains
-        FDot::Based::NUMBERS.each{|n|
-          [:programmer, :user].each{|k|
-            move_next_variable_to(k)
-          }
-        }
+        check_for_based_conditions!
       end
 
       def add_combine_history(instance_one, instance_two)
@@ -192,39 +169,27 @@ module FDot
         unless allowed_intersection.all?{|c| allowed_const_types.map{|c| c.name}.include?(c.name)}
           raise "invalid const(s)! #{const_one}:#{const_two}"
         end
+        puts "combining #{const_one.name} with #{const_two.name}"
         case const_one.name
         when FDot::Based::Instruction.name
           case const_two.name
           when FDot::Based::Instruction.name
-            puts "combining #{FDot::Based::Instruction.name} with #{FDot::Based::Instruction.name}"
-            # todo: build this
-            puts "FDot::Based::Instruction -> FDot::Based::Instruction"
-            # def combine_with_instruction(to_combine_instruction)
-            # end
-            # todo: implement in variable class:
-
+            # combine instruction instance_one with instruction instance_two
+            removed_instruction = instance_one.combine_with_instruction(instance_two)
+            raise "failed to combine!" unless removed_instruction.variable_uuids.empty?
+            self.compile!(instance_one.uuid)
           when FDot::Based::Variable.name
-            puts "combining #{FDot::Based::Instruction.name} with #{FDot::Based::Variable.name}"
-            # todo: build this
-            puts "FDot::Based::Instruction -> FDot::Based::Variable"
-
-            # todo: implement in variable class:
-            # def combine_with_variable(to_combine_variable)
-            # end
+            # combine instruction instance_one with variable instance_two
+            instance_one = instance_two.combine_with_instruction(instance_one)
+            self.compile!(instance_one.uuid)
           end
         when FDot::Based::Variable.name
-          puts "here " * 111
-          puts const_two.name
           case const_two.name
           when FDot::Based::Instruction.name
-            puts "combining #{FDot::Based::Variable.name} with #{FDot::Based::Instruction.name}"
-            puts "FDot::Based::Variable -> FDot::Based::Instruction"
-            #
+            # add variable instance_one to instruction instance_two
             instance_two = instance_one.combine_with_instruction(instance_two)
             self.compile!(instance_two.uuid)
           when FDot::Based::Variable.name
-            puts "combining #{FDot::Based::Variable.name} with #{FDot::Based::Variable.name}"
-            puts "FDot::Based::Variable -> FDot::Based::Variable"
             # create new instruction and add it to history and processor instructions
             new_instruction = instance_one.combine_with_variable(instance_two)
             self.compile!(new_instruction.uuid)
@@ -267,6 +232,80 @@ module FDot
       end
 
       private
+
+      def issue_variables!
+        self.variables.keys.shuffle
+      end
+
+      def initialize_space!
+        return unless FDot.state[:f_dot_queue].empty? && FDot.state[:based_uuid].nil?
+
+        FDot::DOMAINS.each{|domain, i|
+          case domain
+          when :processor
+            FDot.state[:f_dot_queue] = self.issue_variables!
+            FDot.state[:instructions] = []
+          when :programmer, :user
+            FDot.state[domain] = {}
+            FDot.state[domain][:variables] = []
+            FDot.state[domain][:instructions] = []
+          end
+        }
+
+        based_variable = FDot.state[:program].variables[
+          FDot.state[:f_dot_queue].delete_at(0)
+        ]
+        puts "the based variable is #{based_variable.to_s}"
+        # based_variable sets the tone for the process
+        FDot.state[:based_uuid] = based_variable.uuid
+        # create a history entry for based_variable
+
+        add_move_history(based_variable, based_variable.domain_key)
+      end
+
+      def check_for_based_conditions!
+        return unless ready_to_based?
+
+        puts "running based checksum"
+        compile_variables = compiler_contents[:variables]
+        (compile_variables + [FDot.state[:based_uuid]]).each{|v_uuid|
+          variable = self.variables[v_uuid]
+          ordinal_instruction = self.instructions.select{|k, v|
+            v.ordinal == variable.ordinal
+          }.first
+          raise "checksum failed!" if ordinal_instruction.nil?
+          variable.combine_with_instruction(ordinal_instruction)
+        }
+
+        compile_variables = compiler_contents[:variables]
+        raise "based failed!" unless compile_variables.count == 0
+
+        puts "#{self} checksum successful."
+        puts "#{self.class.name} completed."
+        FDot.state[:completed_programs][self.uuid] = self
+
+        puts "listing completed programs:"
+        puts FDot.state[:completed_programs]
+
+        # start a new program
+        FDot::Based.tty_prompt_select(
+          "new program starting now.",
+          [{name: :continue, value: :continue}]
+        )
+        FDot.state[:based_uuid] = nil
+        FDot.state[:program] = FDot::Based::Program.new
+      end
+
+      def f_dot_de_queue!
+        return unless !FDot.state[:f_dot_queue].empty? && ready_to_deque?
+
+        # assign variables to programmer and user domains
+        FDot::Based::NUMBERS.each{|n|
+          [:programmer, :user].each{|k|
+            move_next_variable_to(k)
+          }
+        }
+      end
 
       def compile_variables!(history_instance)
         if history_instance.to_domain == FDot::DOMAINS[:processor]
@@ -317,6 +356,7 @@ module FDot
             }
           )
           with_instance = self.instructions[with_variable_uuid]
+
           add_combine_history(to_combine_instance, with_instance)
         end
       end

@@ -32,9 +32,15 @@ module FDot
       end
 
       def self.create_variable_history!(variable, to_domain)
-        # todo: build out based_variable logic
-        raise "invalid variable! only the based_variable can move that way." if variable.domain == to_domain &&
+        if variable.domain == to_domain &&
           variable.uuid != FDot.state[:based_uuid]
+
+          puts variable.to_s
+          puts "variable.domain == to_domain #{variable.domain == to_domain}"
+          puts "FDot.state[:based_uuid]: #{FDot.state[:based_uuid]}"
+
+          raise "invalid variable! only the based_variable can move that way."
+        end
 
         new_history = self.new(to_domain)
         new_history.from_domain = variable.domain

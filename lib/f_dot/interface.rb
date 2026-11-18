@@ -63,8 +63,11 @@ module FDot
           :compiler.to_s
         )
 
+        compiler_data = FDot.state[:program].compiler_contents
+        compiler_data[:variables] = compiler_data[:variables].sort
+        compiler_data[:instructions] = compiler_data[:instructions].sort
         File.open(compiler_file_path, "w+") do |f|
-          f.write(FDot.state[:program].compiler_contents.to_json)
+          f.write(compiler_data.to_json)
         end
 
         # write based variable file
@@ -104,8 +107,6 @@ module FDot
               }.to_json)
             end
           }
-
-          # todo: write programmer and user instructions
         }
 
         # write processor domain folders

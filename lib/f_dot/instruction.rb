@@ -32,7 +32,7 @@ module FDot
       end
 
       def ordinal
-        FDot.state[:program].variables[variable_uuids.first]
+        FDot.state[:program].variables[variable_uuids.first].ordinal
       end
 
       def domain_key
@@ -41,15 +41,15 @@ module FDot
 
       def to_s
         # todo: unicodeify
-        "FDot::Based::Instruction(#{variable_uuids.map{|v| FDot.state[:program].variables[v].to_s}.join(",")})"
+        "<#{variable_uuids.map{|v| FDot.state[:program].variables[v].to_s}.sort.join(":")}>"
       end
 
       def combine_with_instruction(to_combine_instruction)
-        raise "implement #{self.class.name}: #{__method__}"
-      end
-
-      def combine_with_variable(to_combine_variable)
-        raise "implement #{self.class.name}: #{__method__}"
+        self.variable_uuids += to_combine_instruction.variable_uuids
+        to_combine_instruction.variable_uuids = []
+        # remove to_combine_instruction from the env
+        FDot.state[:instructions].delete(to_combine_instruction.uuid)
+        FDot.state[:program].instructions.delete(to_combine_instruction.uuid)
       end
 
     end

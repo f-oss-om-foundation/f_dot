@@ -16,9 +16,10 @@ module FDot
       include Singleton
 
       def initialize
+        FDot.state[:completed_programs] = {}
         FDot.state[:program] = nil
-        FDot.state[:f_dot_queue] = nil
-        FDot.state[:instructions] = nil
+        FDot.state[:f_dot_queue] = []
+        FDot.state[:instructions] = []
       end
 
       def run
