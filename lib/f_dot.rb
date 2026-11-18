@@ -14,6 +14,7 @@ require "json"
 require "securerandom"
 require "fileutils"
 require "tty-prompt"
+require "tty-font"
 
 [:f_dot].each{|d|
   Dir[

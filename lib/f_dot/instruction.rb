@@ -49,7 +49,29 @@ module FDot
         to_combine_instruction.variable_uuids = []
         # remove to_combine_instruction from the env
         FDot.state[:instructions].delete(to_combine_instruction.uuid)
+        FDot.state[:program].history.delete(to_combine_instruction.uuid)
         FDot.state[:program].instructions.delete(to_combine_instruction.uuid)
+      end
+
+      def history_menu_options
+        [
+          :uuid,
+          :program_uuid,
+          :variable_uuids,
+          :domain_key,
+          :ordinal,
+          :compiled_domain,
+          :compiler_variable_uuid
+        ].each{|attribute|
+          implementation_notes = ""
+          if [:compiled_domain, :compiler_variable_uuid].include?(attribute)
+            implementation_notes = "todo: #{attribute} is not implemented."
+          end
+          {
+            name: "#{attribute}: #{self.send(attribute) || nil.to_s}#{implementation_notes}",
+            value: attribute
+          }
+        }
       end
 
     end

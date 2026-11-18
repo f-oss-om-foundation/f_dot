@@ -76,11 +76,27 @@ module FDot
           new_instruction,
           new_instruction.domain
         )
-        puts FDot.state[:program].history[new_instruction.uuid].last.to_s
+        puts FDot.state[:program].history[new_instruction.uuid].last.to_s if FDot::Based::Processor.user_setting!(:show_history_logging)
 
         FDot.state[:instructions] << new_instruction.uuid
 
         new_instruction
+      end
+
+      def history_menu_options
+        [
+          :uuid,
+          :program_uuid,
+          :type_display,
+          :ordinal,
+          :number_key,
+          :domain_key
+        ].each{|attribute|
+          {
+            name: "#{attribute}: #{self.send(attribute)}",
+            value: attribute
+          }
+        }
       end
 
     end

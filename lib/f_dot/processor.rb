@@ -15,7 +15,16 @@ module FDot
     class Processor
       include Singleton
 
+      attr_accessor :user_settings
+
+      DEFAULT_SETTINGS = {
+        show_history_logging: false,
+        auto_compile_enabled: true,
+        # ...
+      }
+
       def initialize
+        self.user_settings = FDot::Based::Processor::DEFAULT_SETTINGS.dup
         FDot.state[:completed_programs] = {}
         FDot.state[:program] = nil
         FDot.state[:f_dot_queue] = []
@@ -36,7 +45,9 @@ module FDot
           # ].each{|d|
           #   puts d.gsub(FDot::Based.f_dot_space_path, "")
           # }
+          FDot::Based.print_large_title!
           user_input = self.get_user_input
+          next if FDot::Based::Interface.open_main_menu?(user_input)
 
           if Dir.exist?(user_input)
             domain_name = File.basename(user_input)
@@ -44,6 +55,7 @@ module FDot
               selected_variable_file_path = FDot::Based.tty_prompt_select(
                 "select a variable: ", FDot::Based::Interface.user_input_options(user_input)
               )
+              next if FDot::Based::Interface.open_main_menu?(selected_variable_file_path)
               next if selected_variable_file_path.nil?
               variable_uuid = FDot::Based::Interface.get_variable_uuid_from_file(
                 selected_variable_file_path
@@ -51,25 +63,18 @@ module FDot
               raise "invalid variable uuid! #{variable_uuid}" if variable_uuid.nil? ||
                 !FDot.state[:program].variables.keys.include?(variable_uuid)
 
-              selected_variable_option = FDot::Based.tty_prompt_select(
-                "select an action: ", FDot::Based::Interface.user_variable_options(variable_uuid)
+              # move for the user
+              FDot.state[:program].add_move_history(
+                FDot.state[:program].variables[variable_uuid],
+                :processor
               )
-              if selected_variable_option == :move_to_compiler
 
-                # move for the user
-                FDot.state[:program].add_move_history(
-                  FDot.state[:program].variables[variable_uuid],
-                  :processor
-                )
-
-                # move for the programmer
-                programmer_variable_uuid = FDot.state[:programmer][:variables].sample
-                FDot.state[:program].add_move_history(
-                  FDot.state[:program].variables[programmer_variable_uuid],
-                  :processor
-                )
-              end
-
+              # move for the programmer
+              programmer_variable_uuid = FDot.state[:programmer][:variables].sample
+              FDot.state[:program].add_move_history(
+                FDot.state[:program].variables[programmer_variable_uuid],
+                :processor
+              )
             else
               listing_text = ["listing #{File.basename(user_input)} domain..."]
               Dir[
@@ -104,6 +109,36 @@ module FDot
         FDot::Based.tty_prompt_select(
           "#{self.class.name}.#{__method__}: ", FDot::Based::Interface.user_input_options
         )
+      end
+
+      def self.show_settings_menu!
+
+        settings_menu_open = true
+        while settings_menu_open
+          setting_key = FDot::Based.tty_prompt_select(
+            "select a setting to toggle",
+            [{name: :back, value: :back}] + self.instance.user_settings.map{|k, v|
+              {name: "#{k}(#{v})", value: k}
+            }
+          )
+
+          break if setting_key == :back
+
+          set_user_setting(setting_key, !user_setting!(setting_key))
+        end
+      end
+
+      def self.user_setting!(setting_key)
+        setting_key = setting_key.to_sym
+        raise "invalid setting_key: #{setting_key}" unless self.instance.user_settings.keys.include?(setting_key)
+
+        self.instance.user_settings[setting_key]
+      end
+
+      def self.set_user_setting(setting_key, setting_value)
+        setting_key = setting_key.to_sym
+
+        self.instance.user_settings[setting_key] = setting_value
       end
 
     end

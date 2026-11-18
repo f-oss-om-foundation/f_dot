@@ -30,15 +30,11 @@ module FDot
         variable_uuid
       end
 
-      def self.user_variable_options(variable_uuid)
-        FDot.state[:program].get_options_for_variable_uuid(variable_uuid)
-      end
-
       def self.user_input_options(folder_path = nil)
         folder_path = FDot::Based.f_dot_space_path if folder_path.nil? || !Dir.exist?(folder_path)
 
         # get listing for path and return sorted tty-prompt options
-        Dir[
+        [{name: :f_dot_main_menu, value: :f_dot_main_menu}] + Dir[
           File.join(folder_path, "*")
         ].map{|d|
           {name: File.basename(d), value: d}
@@ -48,6 +44,42 @@ module FDot
             sorters << FDot.state[:program].variables[get_variable_uuid_from_file(o[:value])].ordinal
           end
         }
+      end
+
+      def self.open_main_menu?(prompt_select_value)
+        if prompt_select_value == :f_dot_main_menu
+          self.show_main_menu!
+          return true
+        else
+          return false
+        end
+
+      end
+
+      def self.show_main_menu!
+        main_menu_open = true
+        while main_menu_open
+          user_selection = FDot::Based.tty_prompt_select(
+            "f_dot_main_menu =>",
+            self.main_menu_options.map{|k|
+              {name: k, value: k}
+            }
+          )
+
+          case user_selection
+          when :resume_program
+            main_menu_open = false
+          when :open_history
+            FDot.state[:program].show_history_interface!
+          when :open_settings
+            FDot::Based::Processor.show_settings_menu!
+          when :close_program
+            exit if FDot::Based.tty_prompt_select(
+              "are you sure?",
+              [{name: :back, value: :back}, {name: :i_am_sure, value: :i_am_sure}]
+            ) == :i_am_sure
+          end
+        end
       end
 
       def self.reconfigure_user_space!
@@ -70,18 +102,20 @@ module FDot
           f.write(compiler_data.to_json)
         end
 
-        # write based variable file
-        based_variable = FDot.state[:program].variables[
-          FDot.state[:based_uuid]
-        ]
-        based_file_path = File.join(
-          FDot::Based.f_dot_space_path,
-          based_variable.to_s
-        )
-        File.open(based_file_path, "w+") do |f|
-          f.write({
-            uuid: based_variable.uuid
-          }.to_json)
+        unless FDot.state[:based_uuid].nil?
+          # write based variable file
+          based_variable = FDot.state[:program].variables[
+            FDot.state[:based_uuid]
+          ]
+          based_file_path = File.join(
+            FDot::Based.f_dot_space_path,
+            based_variable.to_s
+          )
+          File.open(based_file_path, "w+") do |f|
+            f.write({
+              uuid: based_variable.uuid
+            }.to_json)
+          end
         end
 
         # write programmer and user domain folders
@@ -119,6 +153,17 @@ module FDot
         end
 
         return true
+      end
+
+      private
+
+      def self.main_menu_options
+        [
+          :resume_program,
+          :open_history,
+          :open_settings,
+          :close_program,
+        ]
       end
 
     end

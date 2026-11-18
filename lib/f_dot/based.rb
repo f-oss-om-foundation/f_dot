@@ -39,6 +39,14 @@ module FDot
       :ten
     ]
 
+    def self.print_large_title!
+      puts TTY::Font.new(:standard).write(
+        :f_dot.to_s,
+        letter_spacing: 1
+      )
+    end
+
+
     def self.generate_uuid
       SecureRandom.send(:uuid_v7)
     end

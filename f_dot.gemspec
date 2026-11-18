@@ -37,4 +37,6 @@ Gem::Specification.new do |spec|
 
   # runtime gems
   spec.add_runtime_dependency     "tty-prompt",              "~> 0.23", ">= 0.23.1"
+  spec.add_runtime_dependency     "tty-font",              "~> 0.5", ">= 0.5.0"
+
 end
