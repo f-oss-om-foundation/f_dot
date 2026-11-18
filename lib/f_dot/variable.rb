@@ -23,7 +23,7 @@ module FDot
       def initialize(program_uuid, type, ordinal)
         self.uuid = FDot::Based.generate_uuid
         self.program_uuid = program_uuid
-        self.type = type
+        self.type = type.to_sym
         self.ordinal = ordinal
         self.domain = FDot::DOMAINS[:processor]
       end
@@ -33,7 +33,7 @@ module FDot
       end
 
       def domain_key
-        self.class.domain_key_for(self.domain)
+        FDot::Based::Variable.domain_key_for(self.domain)
       end
 
       def self.domain_key_for(domain_int)
@@ -61,7 +61,7 @@ module FDot
           to_combine_instruction,
           to_combine_instruction.domain
         )
-
+        puts FDot.state[:program].history[to_combine_instruction.uuid].last.to_s if FDot::Based::Processor.user_setting!(:show_history_logging)
         to_combine_instruction
       end
 
@@ -77,7 +77,6 @@ module FDot
           new_instruction.domain
         )
         puts FDot.state[:program].history[new_instruction.uuid].last.to_s if FDot::Based::Processor.user_setting!(:show_history_logging)
-
         FDot.state[:instructions] << new_instruction.uuid
 
         new_instruction
@@ -97,6 +96,52 @@ module FDot
             value: attribute
           }
         }
+      end
+
+      def compute_serialized_state!
+        serialized_state = {
+          name: self.to_s
+        }
+        FDot::Based::Variable.serialization_keys.each{|k|
+          serialized_state[k] = self.send(k)
+        }
+        serialized_state
+      end
+
+      def self.deserialize_into!(program, serialized_variable)
+        raise "invalid serialized_variable! #{serialized_variable}" unless serialization_keys.all?{|k|
+          serialized_variable.keys.include?(k.to_s)
+        }
+
+        # cannot look up by program.variables[variable_uuid] yet
+        variable_instance = program.variables.values.select{|v|
+          v.type.to_s == serialized_variable["type"] &&
+            v.ordinal == serialized_variable["ordinal"]
+        }.first
+
+        raise "missing variable_instance!" if variable_instance.nil?
+        raise "missing variable uuid!" if serialized_variable["uuid"].nil? || serialized_variable["uuid"].empty?
+
+        program.variables.delete(variable_instance.uuid)
+        variable_instance.uuid = serialized_variable["uuid"]
+        variable_instance.program_uuid = serialized_variable["program_uuid"]
+
+        variable_instance.domain = serialized_variable["domain"].to_i
+        program.variables[serialized_variable["uuid"]] = variable_instance
+
+        variable_instance
+      end
+
+      private
+
+      def self.serialization_keys
+        [
+          :uuid,
+          :program_uuid,
+          :type,
+          :ordinal,
+          :domain
+        ]
       end
 
     end

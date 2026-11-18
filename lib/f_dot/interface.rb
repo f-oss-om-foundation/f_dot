@@ -69,6 +69,8 @@ module FDot
           case user_selection
           when :resume_program
             main_menu_open = false
+          when :startup_notes
+            puts FDot.state[:program].startup_notes
           when :open_history
             FDot.state[:program].show_history_interface!
           when :open_settings
@@ -152,6 +154,12 @@ module FDot
           }.to_json)
         end
 
+        # write processor serialized_state file
+        serialized_state_file_path = File.join(FDot::Based.f_dot_space_path, "processor_state.json")
+        File.open(serialized_state_file_path, "w+") do |f|
+          f.write(FDot::Based::Processor.instance.serialized_state.to_json)
+        end
+
         return true
       end
 
@@ -160,6 +168,7 @@ module FDot
       def self.main_menu_options
         [
           :resume_program,
+          :startup_notes,
           :open_history,
           :open_settings,
           :close_program,

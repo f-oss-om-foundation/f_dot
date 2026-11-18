@@ -96,10 +96,60 @@ module FDot
       def to_s
         instance_object = get_variable || get_instruction
         [
-          "[#{self.timestamp}]: '#{(instance_object).to_s}' moved",
+          "[#{self.timestamp}]: '#{instance_object&.to_s}' moved",
           "from <#{FDot::Based::Variable.domain_key_for(self.from_domain)}>",
-          "to <#{instance_object.domain_key}>",
+          "to <#{instance_object&.domain_key}>",
         ].join(" ")
+      end
+
+      def compute_serialized_state!
+        serialized_state = {
+          name: self.to_s
+        }
+        FDot::Based::History.serialization_keys.each{|k|
+          serialized_state[k] = self.send(k)
+        }
+        serialized_state
+      end
+
+      def self.deserialize_into!(program, serialized_history)
+        raise "invalid serialized_history! #{serialized_history}" unless serialization_keys.all?{|k|
+          serialized_history.keys.include?(k.to_s)
+        }
+
+        raise "missing instruction or variable uuid! #{serialized_history}" if [
+          :instruction_uuid, :variable_uuid
+        ].all?{|k| serialized_history[k.to_s].nil?}
+
+        history_instance = nil
+        unless serialized_history["variable_uuid"].nil?
+          history_variable = program.variables[
+            serialized_history["variable_uuid"]
+          ]
+          history_instance = self.new(history_variable, serialized_history["to_domain"])
+        else
+          history_instruction = program.instructions[
+            serialized_history["instruction_uuid"]
+          ]
+          history_instance = self.new(history_instruction, serialized_history["to_domain"])
+        end
+
+        program.history[history_instance.historical_instance.uuid] ||= []
+        program.history[history_instance.historical_instance.uuid] << history_instance
+
+        history_instance
+      end
+
+      private
+
+      def self.serialization_keys
+        [
+          :timestamp,
+          :from_domain,
+          :to_domain,
+          :variable_uuid,
+          :instruction_uuid,
+        ]
       end
 
     end

@@ -19,9 +19,9 @@ module FDot
       attr_accessor :instructions
       attr_accessor :history
 
-      def initialize
+      def initialize(state_uuid = nil)
         puts "#{self}.#{__method__}"
-        self.uuid = FDot::Based.generate_uuid
+        self.uuid = state_uuid || FDot::Based.generate_uuid
         self.variables = {}
         self.instructions = {}
         self.history = {}
@@ -79,8 +79,7 @@ module FDot
           "\t4) a new program starts.\n",
           "user usage:\n",
           "\t=> navigate to the user menu",
-          "\t=> select a variable to move.",
-          "\t=> confirm the move.",
+          "\t=> select a variable in the user menu to move it to the compiler.",
           "\n"
         ].join("\n")
       end
@@ -217,7 +216,6 @@ module FDot
           variable,
           FDot::DOMAINS[move_to_domain_key]
         )
-
         puts history[variable.uuid].last.to_s if FDot::Based::Processor.user_setting!(:show_history_logging)
 
         self.compile!(variable.uuid)
@@ -228,6 +226,7 @@ module FDot
         history_instance = history[lineage_uuid].last
         compile_instructions!(history_instance)
         compile_variables!(history_instance)
+        FDot::Based::Processor.serialize_state!
       end
 
       def show_history_interface!
@@ -254,6 +253,28 @@ module FDot
           history_instance.show_interface!
         end
 
+      end
+
+      def compute_serialized_state!
+        serialized_instructions = {}
+        self.instructions.keys.each{|k|
+          serialized_instructions[k] = self.instructions[k].compute_serialized_state!
+        }
+        serialized_variables = {}
+        self.variables.keys.each{|k|
+          serialized_variables[k] = self.variables[k].compute_serialized_state!
+        }
+        serialized_history = {}
+        self.history.keys.each{|k|
+          serialized_history[k] = history[k].map{|h| h.compute_serialized_state!}
+        }
+
+        {
+          uuid: self.uuid,
+          instructions: serialized_instructions,
+          variables: serialized_variables,
+          history: serialized_history,
+        }
       end
 
       private

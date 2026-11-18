@@ -16,25 +16,129 @@ module FDot
       include Singleton
 
       attr_accessor :user_settings
+      attr_accessor :serialized_state
+      attr_accessor :write_state_callback
+      attr_accessor :plugin_mutex
 
       DEFAULT_SETTINGS = {
         show_history_logging: false,
         auto_compile_enabled: true,
-        # ...
+        debug_inspectors_enabled: false
       }
 
       def initialize
         self.user_settings = FDot::Based::Processor::DEFAULT_SETTINGS.dup
+        self.serialized_state = {}
+        self.write_state_callback = nil
+        self.plugin_mutex = Mutex.new
+
         FDot.state[:completed_programs] = {}
         FDot.state[:program] = nil
         FDot.state[:f_dot_queue] = []
         FDot.state[:instructions] = []
       end
 
-      def run
-        raise "already running #{FDot.state[:program].inspect}!" unless FDot.state[:program].nil?
+      def self.serialize_state!
+        puts "calling #{self.name}.#{__method__}"
+        self.instance.serialized_state = {
+          based_uuid: FDot.state[:based_uuid],
+          completed_programs: FDot.state[:completed_programs].map{|k, v| v.compute_serialized_state!},
+          program: FDot.state[:program].compute_serialized_state!,
+          f_dot_queue: FDot.state[:f_dot_queue],
+          instructions: FDot.state[:instructions],
+          user: {
+            variables: FDot.state[:user][:variables] || []
+          },
+          programmer: {
+            variables: FDot.state[:programmer][:variables] || []
+          }
+        }
 
-        FDot.state[:program] = FDot::Based::Program.new
+        unless self.instance.write_state_callback.nil?
+          self.instance.plugin_mutex.synchronize do
+            self.instance.write_state_callback.call(
+              self.instance.serialized_state
+            )
+          end
+        end
+      end
+
+      def self.initialize_with_data(plugin_data = {})
+        return self.run unless plugin_data.kind_of?(Hash) &&
+          !plugin_data.empty?
+
+        new_serialized_state = {}
+
+        [
+          :based_uuid,
+          :f_dot_queue,
+          :instructions,
+          :program,
+          :user,
+          :programmer,
+          :completed_programs
+        ].each{|k|
+          k = k.to_sym
+
+          new_serialized_state[k] = plugin_data[k.to_s]
+          if new_serialized_state[k].nil?
+            puts "skipping #{k} because plugin_data[#{k}] is not present."
+            next
+          end
+
+          if ![:user, :programmer].include?(k)
+            case k
+            when :based_uuid
+              puts "setting based_uuid from data init: #{new_serialized_state[k]}"
+              FDot.state[:based_uuid] = new_serialized_state[k]
+            when :completed_programs
+              puts :todo_initialize_completed_programs
+            when :program
+              p_serialized = new_serialized_state[k]
+
+              program_instance = FDot::Based::Program.new(p_serialized["uuid"])
+              puts "#{__method__} init program from serialized data! #{program_instance}"
+              program_instance.uuid = p_serialized["uuid"]
+              FDot.state[:program] = program_instance
+
+              p_serialized["variables"].each{|_, serialized|
+                FDot::Based::Variable.deserialize_into!(FDot.state[:program], serialized)
+              }
+
+              p_serialized["instructions"].each{|_, serialized|
+                FDot::Based::Instruction.deserialize_into!(FDot.state[:program], serialized)
+              }
+
+              p_serialized["history"].map{|historical_uuid, _|
+                p_serialized["history"][historical_uuid].each{|h|
+                  FDot::Based::History.deserialize_into!(FDot.state[:program], h)
+                }
+              }
+            when :f_dot_queue, :instructions
+              FDot.state[k] = new_serialized_state[k]
+            end
+          else
+            new_serialized_state[k][:variables] = new_serialized_state[k]["variables"].dup
+            new_serialized_state[k].delete("variables")
+            new_serialized_state[k][:variables].each{|variable_uuid|
+              FDot.state[:program].variables[variable_uuid].domain = FDot::DOMAINS[k.to_sym]
+            }
+            FDot.state[k.to_sym] = {
+              variables: [],
+              instructions: []
+            }
+            FDot.state[k.to_sym][:variables] = new_serialized_state[k][:variables]
+          end
+        }
+        puts "#{__method__} about to run with FDot.state[:program] set to: #{FDot.state[:program]}"
+        self.instance.serialized_state = new_serialized_state
+        self.instance.run(true)
+      end
+
+      def run(force = false)
+        raise "already running #{FDot.state[:program].uuid}!" if !force && !FDot.state[:program].nil?
+
+        FDot.state[:program] ||= FDot::Based::Program.new
         puts "loaded #{FDot.state[:program]}"
 
         loop do
@@ -63,6 +167,21 @@ module FDot
               raise "invalid variable uuid! #{variable_uuid}" if variable_uuid.nil? ||
                 !FDot.state[:program].variables.keys.include?(variable_uuid)
 
+              if FDot::Based::Processor.user_setting!(:debug_inspectors_enabled)
+                debugger_open = true
+                while debugger_open
+                  v = FDot.state[:program].variables[variable_uuid]
+                  variable_attribute = FDot::Based.tty_prompt_select(
+                    "select attribute: ",
+                    [{name: :close_debugger, value: :close_debugger}] + v.history_menu_options
+                  )
+                  if variable_attribute == :close_debugger
+                    debugger_open = false
+                  else
+                    puts v.send(variable_attribute)
+                  end
+                end
+              end
               # move for the user
               FDot.state[:program].add_move_history(
                 FDot.state[:program].variables[variable_uuid],

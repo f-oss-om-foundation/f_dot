@@ -28,11 +28,11 @@ module FDot
         self.domain = FDot::DOMAINS[:processor]
         self.compiled_domain = nil
         self.compiler_variable_uuid = nil
-        FDot.state[:program].instructions[self.uuid] = self
+        program_instance.instructions[self.uuid] = self
       end
 
       def ordinal
-        FDot.state[:program].variables[variable_uuids.first].ordinal
+        program_instance.variables[variable_uuids.first].ordinal
       end
 
       def domain_key
@@ -41,7 +41,11 @@ module FDot
 
       def to_s
         # todo: unicodeify
-        "<#{variable_uuids.map{|v| FDot.state[:program].variables[v].to_s}.sort.join(":")}>"
+        "<#{variable_uuids.map{|v| program_instance.variables[v].to_s}.sort.join(":")}>"
+      end
+
+      def program_instance
+        FDot.state[:program].uuid == self.program_uuid ? FDot.state[:program] : FDot.state[:completed_programs][self.program_uuid]
       end
 
       def combine_with_instruction(to_combine_instruction)
@@ -72,6 +76,45 @@ module FDot
             value: attribute
           }
         }
+      end
+
+      def compute_serialized_state!
+        serialized_state = {
+          name: self.to_s
+        }
+        FDot::Based::Instruction.serialization_keys.each{|k|
+          serialized_state[k] = self.send(k)
+        }
+        serialized_state
+      end
+
+      def self.deserialize_into!(program, serialized_instruction)
+        raise "invalid serialized_instruction! #{serialized_instruction}" unless serialization_keys.all?{|k|
+          serialized_instruction.keys.include?(k.to_s)
+        }
+        instruction_instance = self.new(program.uuid, serialized_instruction["variable_uuids"])
+
+        raise "missing variable uuid!" if serialized_instruction["uuid"].nil? || serialized_instruction["uuid"].empty?
+
+        program.instructions.delete(instruction_instance.uuid)
+        instruction_instance.uuid = serialized_instruction["uuid"]
+        instruction_instance.domain = serialized_instruction["domain"].to_i
+        instruction_instance.compiled_domain = serialized_instruction["compiled_domain"]
+        instruction_instance.compiler_variable_uuid = serialized_instruction["compiler_variable_uuid"]
+        program.instructions[serialized_instruction["uuid"]] = instruction_instance
+
+        instruction_instance
+      end
+
+      private
+
+      def self.serialization_keys
+        [
+          :uuid,
+          :program_uuid,
+          :variable_uuids,
+          :domain
+        ]
       end
 
     end
