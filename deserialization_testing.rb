@@ -8,8 +8,6 @@
 # right now this is a simple example of utilizing the
 #   FDot::Based::Processor.instance.write_state_callback
 #
-# within an oss_om plugin.
-#
 # by i2097i
 
 require "f_dot"
