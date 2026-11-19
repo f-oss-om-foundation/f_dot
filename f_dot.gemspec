@@ -10,6 +10,7 @@
 
 =end
 
+GEM_DESCRIPTION = "f_dot is checksum tool only a computer could love."
 
 require_relative "lib/f_dot/version"
 
@@ -19,9 +20,9 @@ Gem::Specification.new do |spec|
   spec.authors = ["i2097i"]
   spec.email = ["i2097i@hotmail.com"]
 
-  # spec.description   = "todo:"
-  spec.summary       = "todo:"
-  # spec.homepage      = "todo:"
+  spec.description   = GEM_DESCRIPTION + "\n#{FDot::VERSION} release notes: #{FDot::RELEASE_NOTES}"
+  spec.summary       = GEM_DESCRIPTION
+  spec.homepage      = "https://github.com/f-oss-om-foundation/f_dot"
   spec.license       = "MIT"
   spec.files         = `git ls-files`.split("\n").reject{|p| p.match?(/^(spec|.release|.*.gem$)/)}
   spec.bindir        = "bin"

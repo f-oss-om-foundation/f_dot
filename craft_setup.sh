@@ -1,3 +1,7 @@
+# craft_setup.sh
+# helper for loading plugins.
+# by i2097i
+
 rake
 gem install ../aro/pkg/aro-0.2.8.gem
 mkdir ../craft/plugins
