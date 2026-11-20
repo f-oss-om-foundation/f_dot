@@ -52,7 +52,10 @@ module FDot
     end
 
     def self.f_dot_space_path
-      path = File.join(ENV["HOME"], FDot::Based::FOLDER_NAME)
+      path = File.join(
+        FDot::Based::Processor.instance.f_dot_space_override_path || ENV["HOME"],
+        FDot::Based::FOLDER_NAME
+      )
       unless Dir.exist?(path)
         FileUtils.mkdir_p(path)
       end

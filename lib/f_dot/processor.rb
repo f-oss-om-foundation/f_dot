@@ -19,6 +19,7 @@ module FDot
       attr_accessor :serialized_state
       attr_accessor :write_state_callback
       attr_accessor :plugin_mutex
+      attr_accessor :f_dot_space_override_path
 
       DEFAULT_SETTINGS = {
         show_history_logging: false,
@@ -31,6 +32,7 @@ module FDot
         self.serialized_state = {}
         self.write_state_callback = nil
         self.plugin_mutex = Mutex.new
+        self.f_dot_space_override_path = nil
 
         FDot.state[:completed_programs] = {}
         FDot.state[:program] = nil
@@ -63,9 +65,17 @@ module FDot
         end
       end
 
-      def self.initialize_with_data(plugin_data = {})
-        return self.run unless plugin_data.kind_of?(Hash) &&
-          !plugin_data.empty?
+      def self.initialize_with_data(
+        f_dot_space_override_path = nil,
+        write_state_callback = nil,
+        initialize_data = {}
+      )
+
+        self.instance.write_state_callback = write_state_callback
+        self.instance.f_dot_space_override_path = f_dot_space_override_path
+
+        return self.instance.run unless initialize_data.kind_of?(Hash) &&
+          !initialize_data.empty?
 
         new_serialized_state = {}
 
@@ -80,9 +90,9 @@ module FDot
         ].each{|k|
           k = k.to_sym
 
-          new_serialized_state[k] = plugin_data[k.to_s]
+          new_serialized_state[k] = initialize_data[k.to_s]
           if new_serialized_state[k].nil?
-            puts "skipping #{k} because plugin_data[#{k}] is not present."
+            puts "skipping #{k} because initialize_data[#{k}] is not present."
             next
           end
 
@@ -143,12 +153,7 @@ module FDot
 
         loop do
           FDot::Based::Interface.reconfigure_user_space!
-          # list .f_dot directory
-          # Dir[
-          #   File.join(FDot::Based.f_dot_space_path, "*")
-          # ].each{|d|
-          #   puts d.gsub(FDot::Based.f_dot_space_path, "")
-          # }
+
           FDot::Based.print_large_title!
           user_input = self.get_user_input
           next if FDot::Based::Interface.open_main_menu?(user_input)
