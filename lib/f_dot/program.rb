@@ -41,18 +41,9 @@ module FDot
             self.variables[new_variable.uuid] = new_variable
           }
         }
-
-        FDot::Based.print_large_title!
-        puts startup_notes
-
-        # start a new program
-        exit if :close_program == FDot::Based.tty_prompt_select(
-          "press enter to continue",
-          [{name: :start, value: :start}, {name: :close_program, value: :close_program}]
-        )
       end
 
-      def startup_notes
+      def self.startup_notes
         [
           "welcome to f_dot. | f_dot is based. | this is a based f_dot program.\n",
           "interface description:\n",
@@ -164,7 +155,7 @@ module FDot
         allowed_intersection = (
           allowed_const_types & [const_one, const_two]
         )
-        puts allowed_intersection
+
         unless allowed_intersection.all?{|c| allowed_const_types.map{|c| c.name}.include?(c.name)}
           raise "invalid const(s)! #{const_one}:#{const_two}"
         end
@@ -348,11 +339,29 @@ module FDot
         puts "#{self.class.name} completed."
         FDot.state[:completed_programs][self.uuid] = self
 
-        puts "listing completed programs:"
-        puts FDot.state[:completed_programs]
+        # puts "listing completed programs:"
+        # puts FDot.state[:completed_programs]
 
         FDot.state[:based_uuid] = nil
-        FDot.state[:program] = FDot::Based::Program.new
+        unless FDot::Based::Program.show_startup! == :start
+          FDot.state[:program] = FDot::Based::Program.new
+        else
+          FDot::Based::Processor.user_exited!
+        end
+      end
+
+      def self.show_startup!(force = false)
+        return :start unless force ||
+          FDot::Based::Processor.instance.processing_mode != FDot::Based::Processor::MODES[:one_move]
+
+        FDot::Based.print_large_title!
+        puts self.startup_notes
+
+        # start a new program or close f_dot
+        FDot::Based.tty_prompt_select(
+          "press enter to continue",
+          [{name: :start, value: :start}, {name: :close_program, value: :close_program}]
+        )
       end
 
       def f_dot_de_queue!
@@ -368,7 +377,9 @@ module FDot
 
       def compile_variables!(history_instance)
         if history_instance.to_domain == FDot::DOMAINS[:processor]
-          if FDot::Based::Processor.user_setting!(:auto_compile_enabled)
+          if FDot::Based::Processor.user_setting!(:auto_compile_enabled) ||
+            FDot::Based::Processor.instance.processing_mode == FDot::Based::Processor::MODES[:one_move]
+
             while get_combinable_variables.any?
               combinable_variables = get_combinable_variables
               to_combine_instance = combinable_variables.first
@@ -407,7 +418,8 @@ module FDot
 
       def compile_instructions!(history_instance)
         while get_combinable_instructions.any?
-          if FDot::Based::Processor.user_setting!(:auto_compile_enabled)
+          if FDot::Based::Processor.user_setting!(:auto_compile_enabled) ||
+            FDot::Based::Processor.instance.processing_mode == FDot::Based::Processor::MODES[:one_move]
             while get_combinable_instructions.any?
               combinable_instructions = get_combinable_instructions
               to_combine_instance = combinable_instructions.first

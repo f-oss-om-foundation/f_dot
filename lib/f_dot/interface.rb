@@ -70,13 +70,13 @@ module FDot
           when :resume_program
             main_menu_open = false
           when :startup_notes
-            puts FDot.state[:program].startup_notes
+            puts FDot::Based::Program.startup_notes
           when :open_history
             FDot.state[:program].show_history_interface!
           when :open_settings
             FDot::Based::Processor.show_settings_menu!
           when :close_program
-            exit if FDot::Based.tty_prompt_select(
+            return FDot::Based::Processor.user_exited! if FDot::Based.tty_prompt_select(
               "are you sure?",
               [{name: :back, value: :back}, {name: :i_am_sure, value: :i_am_sure}]
             ) == :i_am_sure
