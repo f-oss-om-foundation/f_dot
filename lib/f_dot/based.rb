@@ -46,7 +46,6 @@ module FDot
       )
     end
 
-
     def self.generate_uuid
       SecureRandom.send(:uuid_v7)
     end

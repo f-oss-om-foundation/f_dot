@@ -14,4 +14,10 @@
 
 require :f_dot.to_s
 
-FDot::Based::Processor.instance.run
+unless ARGV[0]&.strip&.to_sym == :cubicus
+  # run based f_dot
+  FDot::Based::Processor.instance.run
+else
+  # launch new cubicus
+  FDot::Based::Cubicus.launch!
+end

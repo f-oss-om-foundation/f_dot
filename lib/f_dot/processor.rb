@@ -20,11 +20,18 @@ module FDot
       attr_accessor :write_state_callback
       attr_accessor :plugin_mutex
       attr_accessor :f_dot_space_override_path
+      attr_accessor :is_processing
+      attr_accessor :processing_mode
 
       DEFAULT_SETTINGS = {
         show_history_logging: false,
         auto_compile_enabled: true,
         debug_inspectors_enabled: false
+      }
+
+      MODES = {
+        default: 0,
+        one_move: 1
       }
 
       def initialize
@@ -33,6 +40,8 @@ module FDot
         self.write_state_callback = nil
         self.plugin_mutex = Mutex.new
         self.f_dot_space_override_path = nil
+        self.is_processing = true
+        self.processing_mode = FDot::Based::Processor::MODES[:default]
 
         FDot.state[:completed_programs] = {}
         FDot.state[:program] = nil
@@ -41,10 +50,9 @@ module FDot
       end
 
       def self.serialize_state!
-        puts "calling #{self.name}.#{__method__}"
         self.instance.serialized_state = {
           based_uuid: FDot.state[:based_uuid],
-          completed_programs: FDot.state[:completed_programs].map{|k, v| v.compute_serialized_state!},
+          # completed_programs: FDot.state[:completed_programs].map{|k, v| v.compute_serialized_state!},
           program: FDot.state[:program].compute_serialized_state!,
           f_dot_queue: FDot.state[:f_dot_queue],
           instructions: FDot.state[:instructions],
@@ -66,13 +74,19 @@ module FDot
       end
 
       def self.initialize_with_data(
-        f_dot_space_override_path = nil,
-        write_state_callback = nil,
-        initialize_data = {}
+        override_path = nil,
+        callback = nil,
+        initialize_data = {},
+        one_move_mode = false
       )
 
-        self.instance.write_state_callback = write_state_callback
-        self.instance.f_dot_space_override_path = f_dot_space_override_path
+        if one_move_mode
+          self.instance.processing_mode = FDot::Based::Processor::MODES[:one_move]
+          self.set_user_setting(:show_history_logging, true)
+        end
+
+        self.instance.write_state_callback = callback
+        self.instance.f_dot_space_override_path = override_path
 
         return self.instance.run unless initialize_data.kind_of?(Hash) &&
           !initialize_data.empty?
@@ -104,26 +118,31 @@ module FDot
             when :completed_programs
               puts :todo_initialize_completed_programs
             when :program
-              p_serialized = new_serialized_state[k]
+              begin
+                p_serialized = new_serialized_state[k]
 
-              program_instance = FDot::Based::Program.new(p_serialized["uuid"])
-              puts "#{__method__} init program from serialized data! #{program_instance}"
-              program_instance.uuid = p_serialized["uuid"]
-              FDot.state[:program] = program_instance
+                program_instance = FDot::Based::Program.new(p_serialized["uuid"])
+                puts "#{__method__} init program from serialized data! #{program_instance}"
+                program_instance.uuid = p_serialized["uuid"]
+                FDot.state[:program] = program_instance
 
-              p_serialized["variables"].each{|_, serialized|
-                FDot::Based::Variable.deserialize_into!(FDot.state[:program], serialized)
-              }
+                p_serialized["variables"].each{|_, serialized|
+                  FDot::Based::Variable.deserialize_into!(FDot.state[:program], serialized)
+                } unless p_serialized["variables"].nil?
 
-              p_serialized["instructions"].each{|_, serialized|
-                FDot::Based::Instruction.deserialize_into!(FDot.state[:program], serialized)
-              }
+                p_serialized["instructions"].each{|_, serialized|
+                  FDot::Based::Instruction.deserialize_into!(FDot.state[:program], serialized)
+                } unless p_serialized["variables"].nil?
 
-              p_serialized["history"].map{|historical_uuid, _|
-                p_serialized["history"][historical_uuid].each{|h|
-                  FDot::Based::History.deserialize_into!(FDot.state[:program], h)
-                }
-              }
+                p_serialized["history"].map{|historical_uuid, _|
+                  p_serialized["history"][historical_uuid].each{|h|
+                    FDot::Based::History.deserialize_into!(FDot.state[:program], h)
+                  }
+                } unless p_serialized["variables"].nil?
+              rescue StandardError => e
+                puts e.inspect
+                puts Thread.main.backtrace
+              end
             when :f_dot_queue, :instructions
               FDot.state[k] = new_serialized_state[k]
             end
@@ -148,10 +167,15 @@ module FDot
       def run(force = false)
         raise "already running #{FDot.state[:program].uuid}!" if !force && !FDot.state[:program].nil?
 
-        FDot.state[:program] ||= FDot::Based::Program.new
-        puts "loaded #{FDot.state[:program]}"
+        if FDot::Based::Program.show_startup! != :start
+          FDot::Based::Processor.user_exited!
+        else
+          FDot.state[:program] ||= FDot::Based::Program.new
+          puts "loaded #{FDot.state[:program]}"
+          self.is_processing = true
+        end
 
-        loop do
+        while self.is_processing
           FDot::Based::Interface.reconfigure_user_space!
 
           FDot::Based.print_large_title!
@@ -199,6 +223,14 @@ module FDot
                 FDot.state[:program].variables[programmer_variable_uuid],
                 :processor
               )
+
+              if self.processing_mode == FDot::Based::Processor::MODES[:one_move]
+                unless self.write_state_callback.nil?
+                  self.write_state_callback.call(self.serialized_state, true)
+                end
+                FDot::Based::Interface.reconfigure_user_space!
+                break
+              end
             else
               listing_text = ["listing #{File.basename(user_input)} domain..."]
               Dir[
@@ -227,12 +259,18 @@ module FDot
             )
           end
         end
+
+        !self.is_processing
       end
 
       def get_user_input
         FDot::Based.tty_prompt_select(
           "#{self.class.name}.#{__method__}: ", FDot::Based::Interface.user_input_options
         )
+      end
+
+      def self.user_exited!
+        self.instance.is_processing = false
       end
 
       def self.show_settings_menu!
