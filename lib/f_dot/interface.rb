@@ -118,10 +118,12 @@ module FDot
         compiler_data = FDot.state[:program].compiler_contents
         compiler_data[:variables] = compiler_data[:variables].sort
         compiler_data[:instructions] = compiler_data[:instructions].sort
-        File.open(self.compiler_file_path, "w+") do |f|
+        temp_compiler_file_path = "#{self.compiler_file_path}_temp"
+        File.open(temp_compiler_file_path, "w") do |f|
           f.write(compiler_data.to_json)
           f.fsync
         end
+        FileUtils.mv(temp_compiler_file_path, self.compiler_file_path)
 
         unless FDot.state[:based_uuid].nil?
           # write based variable file
@@ -132,7 +134,7 @@ module FDot
             FDot::Based.f_dot_space_path,
             based_variable.to_s
           )
-          File.open(based_file_path, "w+") do |f|
+          File.open(based_file_path, "w") do |f|
             f.write({
               uuid: based_variable.uuid
             }.to_json)
@@ -157,7 +159,7 @@ module FDot
             )
 
             # write variable identifier into variable file
-            File.open(variable_file_path, "w+") do |f|
+            File.open(variable_file_path, "w") do |f|
               f.write({
                 uuid: v
               }.to_json)
@@ -168,7 +170,7 @@ module FDot
 
         # write processor domain folders
         processor_file_path = File.join(FDot::Based.f_dot_space_path, :processor.to_s)
-        File.open(processor_file_path, "w+") do |f|
+        File.open(processor_file_path, "w") do |f|
           f.write({
             variables: FDot.state[:f_dot_queue],
             instructions: FDot.state[:instructions]
@@ -178,7 +180,7 @@ module FDot
 
         # write processor serialized_state file
         serialized_state_file_path = File.join(FDot::Based.f_dot_space_path, "processor_state.json")
-        File.open(serialized_state_file_path, "w+") do |f|
+        File.open(serialized_state_file_path, "w") do |f|
           f.write(FDot::Based::Processor.instance.serialized_state.to_json)
           f.fsync
         end

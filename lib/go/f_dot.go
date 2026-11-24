@@ -35,26 +35,16 @@ var displayFileName = "display"
 var controlsFileName = "controls"
 var inputFileName = "input"
 
-func updateFDot(ws *websocket.Conn) {
-  // read display file
-  displayFileData, err := os.ReadFile(pathForFilename(displayFileName))
-  if err != nil {
-    log.Print("failed to read:", displayFileName)
-  } else {
-    log.Print("writing ", displayFileName)
-    for _, line := range strings.Split(string(displayFileData), "\n") {
-      ws.WriteMessage(websocket.TextMessage, []byte(line))
-    }
+func writeDisplay(ws *websocket.Conn, displayFileData []byte) {
+  log.Print("writing ", displayFileName)
+  for _, line := range strings.Split(string(displayFileData), "\n") {
+    ws.WriteMessage(websocket.TextMessage, []byte(line))
   }
+}
 
-  // read controls file
-  controlsFileData, err := os.ReadFile(pathForFilename(controlsFileName))
-  if err != nil {
-    log.Print("failed to read:", controlsFileName)
-  } else {
-    log.Print("writing ", controlsFileName)
-    ws.WriteMessage(websocket.TextMessage, controlsFileData)
-  }
+func writeControls(ws *websocket.Conn, controlsFileData []byte) {
+  log.Print("writing ", controlsFileName)
+  ws.WriteMessage(websocket.TextMessage, controlsFileData)
 }
 
 func render(w http.ResponseWriter, r *http.Request) {
@@ -66,7 +56,27 @@ func render(w http.ResponseWriter, r *http.Request) {
   }
   defer c.Close()
 
-  updateFDot(c)
+  path, err := os.Executable()
+  if err != nil {
+    log.Print("path, err := os.Executable() error!", err)
+  }
+  os.ReadDir(path)
+
+  // send display file
+  displayFileData, err := os.ReadFile(pathForFilename(displayFileName))
+  if err != nil {
+    log.Print("failed to read:", displayFileName)
+  } else {
+    writeDisplay(c, displayFileData)
+  }
+
+  // send controls file
+  controlsFileData, err := os.ReadFile(pathForFilename(controlsFileName))
+  if err != nil {
+    log.Print("failed to read:", controlsFileName)
+  } else {
+    writeControls(c, controlsFileData)
+  }
 
   type wsMessage struct {
     messageType int
@@ -89,8 +99,6 @@ func render(w http.ResponseWriter, r *http.Request) {
       if err != nil {
         return
       }
-      time.Sleep(222 * time.Millisecond)
-      updateFDot(c)
     }
   }()
 
@@ -103,6 +111,32 @@ func render(w http.ResponseWriter, r *http.Request) {
       os.WriteFile(pathForFilename(inputFileName), []byte(msg.message), 0644)
       if err != nil {
         log.Fatal(err)
+      }
+
+      time.Sleep(222 * time.Millisecond)
+
+      path, err := os.Executable()
+      if err != nil {
+        log.Print("path, err := os.Executable() error!", err)
+      }
+      var f_dot_dir = filepath.Dir(path)
+      log.Print("os.ReadDir(f_dot_dir)", f_dot_dir+"/")
+      os.ReadDir(f_dot_dir+"/")
+
+      // send display file
+      displayFileData, err := os.ReadFile(pathForFilename(displayFileName))
+      if err != nil {
+        log.Print("failed to read:", displayFileName)
+      } else {
+        writeDisplay(c, displayFileData)
+      }
+
+      // send controls file
+      controlsFileData, err := os.ReadFile(pathForFilename(controlsFileName))
+      if err != nil {
+        log.Print("failed to read:", controlsFileName)
+      } else {
+        writeControls(c, controlsFileData)
       }
     }
   }

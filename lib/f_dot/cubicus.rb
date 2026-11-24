@@ -51,9 +51,9 @@ module FDot
         go_server_path = self.class.path_for_file(:f_dot_go)
         prepare_f_dot_go! unless File.exist?(go_server_path)
         FDot::Based::Interface.instance.display_mode = FDot::DISPLAY_MODES[:websockets]
-        self.ws_thread = Thread.new do
-          system("#{go_server_path} > #{go_server_path}.log 2>&1")
-        end
+        # self.ws_thread = Thread.new do
+          `#{go_server_path} > #{go_server_path}.log 2>&1 &`
+        # end
       end
 
       def self.read_input!
@@ -74,7 +74,7 @@ module FDot
         # end
 
         # write current controls
-        File.open(self.path_for_file(:controls), "w+") do |f|
+        File.open(self.path_for_file(:controls), "w") do |f|
           f.write(self.instance.controls.map{|k, v|
             v.merge({uuid: k})
           }.to_json)
@@ -99,16 +99,12 @@ module FDot
           # wait for user input
           while !File.exist?(FDot::Based::Cubicus.path_for_file(:input)) ||
             File.read(FDot::Based::Cubicus.path_for_file(:input)).empty?
-            sleep(0.1)
           end
 
           input_value = FDot::Based::Cubicus.read_input!
         }.join
 
         yield(input_value)
-
-        FDot::Based::Interface.reconfigure_user_space!
-        self.write_open_system!
       end
 
       private

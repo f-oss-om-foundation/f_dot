@@ -198,8 +198,6 @@ module FDot
               FDot::Based.tty_prompt_select(
                 "select a variable: ", FDot::Based::Interface.user_input_options(user_input)
               ) {|selected_variable_file_path|
-
-
                 next if FDot::Based::Interface.open_main_menu?(selected_variable_file_path)
                 next if selected_variable_file_path.nil?
                 variable_uuid = FDot::Based::Interface.get_variable_uuid_from_file(

@@ -105,7 +105,7 @@ module FDot
         #
         # note => :based_variable is not strictly a domain
         #
-        self.compiler_mutex.synchronize do
+        # self.compiler_mutex.synchronize do
           @complier_contents = {
             variables: self.variables.select{|k, v|
               k != FDot.state[:based_uuid] &&
@@ -119,7 +119,7 @@ module FDot
               !FDot.state[:user][:instructions].include?(k)
             }.map{|k, v| k},
           }
-        end
+        # end
 
         @complier_contents
       end
