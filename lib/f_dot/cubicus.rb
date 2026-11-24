@@ -14,232 +14,130 @@ module FDot
   module Based
     class Cubicus
       include Singleton
-      attr_accessor :delegate
-      attr_accessor :delegate_mutex
-      attr_accessor :prompt
+
+      VALID_KEYS = [
+        :controls,
+        :display,
+        :input,
+        :f_dot_go,
+        :"index.html"
+      ]
+
+      attr_accessor :ws_thread
+      attr_accessor :ws_busy
+      attr_accessor :controls
+      attr_accessor :is_running
 
       FOLDER_NAME = ".cubicus"
 
+      GO_SERVER_BASENAME = "f_dot.go"
 
       def initialize
-        self.prompt = TTY::Prompt.new
-        self.delegate_mutex = Mutex.new
+        self.is_running = false
+        self.ws_thread = nil
+        self.controls = {}
+        @ws_busy = false
+
+        puts "starting control loop"
+        # self.start_ws_thread
       end
 
-      class DefaultDelegate
-        attr_accessor :direction
-        attr_accessor :position
+      def start_ws_thread
+        return if @ws_busy
+        @ws_busy = true
+        self.ws_thread&.exit
+        self.ws_thread&.kill
 
-        DIRECTIONS = {
-          north: 0,
-          south: 1,
-          east: 2,
-          west: 3
-        }
-
-        def initialize
-          self.direction = FDot::Based::Cubicus::DefaultDelegate::DIRECTIONS[:north]
-          self.position = {
-            x: 0,
-            y: 0,
-            z: 0
-          }
-          puts "this is the default cubicus display delegate."
-        end
-
-        def direction_name
-          FDot::Based::Cubicus::DefaultDelegate::DIRECTIONS.select{|k, v| v == self.direction}.first[0]
-        end
-        def current_display
-          (TTY::Font.new(:standard).write(
-            :cubicus.to_s,
-            letter_spacing: 1
-          ).split("\n") + [
-            "the user is facing #{direction_name}.",
-            "the user's position is #{position}.",
-          ]).join("\n")
-        end
-        def current_controls
-          [
-            {name: "(a):forward", value: :forward},
-            {name: "(b):left", value: :left},
-            {name: "(c):up", value: :up},
-            {name: "(d):down", value: :down},
-            {name: "(e):right", value: :right},
-            {name: "(f):backward", value: :backward}
-          ]
-        end
-        def respond_to_control(control_hash)
-
-          raise "invalid control_hash!" if control_hash.nil? || !control_hash.kind_of?(Hash)
-
-          respond_to_value = control_hash["value"].to_sym
-
-          puts "user selected #{control_hash} control option"
-          case respond_to_value
-          when :forward
-            self.move_forward!
-          when :left
-            self.rotate(respond_to_value)
-          when :up
-            self.position[:z] += 1
-          when :down
-            self.position[:z] -= 1
-          when :right
-            self.rotate(respond_to_value)
-          when :backward
-            self.move_backward!
-          end
-        end
-
-        def move_forward!
-          case self.direction
-          when DIRECTIONS[:north]
-            self.position[:x] += 1
-          when DIRECTIONS[:south]
-            self.position[:x] -= 1
-          when DIRECTIONS[:east]
-            self.position[:y] += 1
-          when DIRECTIONS[:west]
-            self.position[:y] -= 1
-          end
-        end
-
-        def move_backward!
-          case self.direction
-          when DIRECTIONS[:north]
-            self.position[:x] -= 1
-          when DIRECTIONS[:south]
-            self.position[:x] += 1
-          when DIRECTIONS[:east]
-            self.position[:y] -= 1
-          when DIRECTIONS[:west]
-            self.position[:y] += 1
-          end
-        end
-
-        def rotate(rotation_key)
-          raise "invalid rotate rotation_key!" unless [:left, :right].include?(rotation_key)
-
-          case self.direction
-          when DIRECTIONS[:north]
-            self.direction = DIRECTIONS[rotation_key == :left ? :west : :east]
-          when DIRECTIONS[:south]
-            self.direction = DIRECTIONS[rotation_key == :left ? :east : :west]
-          when DIRECTIONS[:east]
-            self.direction = DIRECTIONS[rotation_key == :left ? :north : :south]
-          when DIRECTIONS[:west]
-            self.direction = DIRECTIONS[rotation_key == :left ? :south : :north]
-          end
+        go_server_path = self.class.path_for_file(:f_dot_go)
+        prepare_f_dot_go! unless File.exist?(go_server_path)
+        FDot::Based::Interface.instance.display_mode = FDot::DISPLAY_MODES[:websockets]
+        self.ws_thread = Thread.new do
+          system("#{go_server_path} > #{go_server_path}.log 2>&1")
         end
       end
 
-      def self.launch!(delegate = nil)
-        delegate ||= FDot::Based::Cubicus::DefaultDelegate.new
-
-        raise "invalid delegate!" unless !delegate.nil? &&
-          delegate.respond_to?(:current_display) &&
-          delegate.respond_to?(:current_controls) &&
-          delegate.respond_to?(:respond_to_control)
-
-        self.instance.delegate = delegate
-        puts "launching new cubicus in #{cubicus_space_path}"
-
-        cubicus_running = true
-        while cubicus_running
-          self.instance.render_cubicus!
-
-          options = Dir[File.join(self.cubicus_space_path, "*")].select{|f|
-            File.basename(f) != :display.to_s
-          }.map{|f|
-            {name: File.basename(f), value: f}
-          } + [{name: :quit, value: :quit}]
-
-          puts delegate.current_display
-          selected_option = self.instance.prompt.select(
-            "make a selection",
-            options,
-            show_help: :always,
-            cycle: true
-          )
-
-          cubicus_running = selected_option != :quit
-          break unless cubicus_running
-
-          delegate.respond_to_control(JSON.parse(File.read(selected_option)))
+      def self.read_input!
+        unless File.exist?(self.path_for_file(:input))
+          raise "invalid #{__method__} file does not exist at #{self.path_for_file(:input)}!"
         end
+
+        input = JSON.parse(File.read(self.path_for_file(:input)))
+        raise "invalid input uuid!" unless self.instance.controls.keys.include?(input["uuid"])
+
+        self.instance.controls[input["uuid"]][:value]
       end
 
-      def render_cubicus!
-        unless File.exist?(self.class.cubicus_display_path)
-          File.open(self.class.cubicus_display_path, "w+") do |f|
-            f.write(self.delegate.current_display)
+      def self.write_open_system!
+        # # write current display
+        # File.open(self.path_for_file(:display), "w+") do |f|
+        #   f.write(self.instance.display.to_json)
+        # end
+
+        # write current controls
+        File.open(self.path_for_file(:controls), "w+") do |f|
+          f.write(self.instance.controls.map{|k, v|
+            v.merge({uuid: k})
+          }.to_json)
+          f.fsync
+        end
+
+        # clear last input
+        FileUtils.rm_rf(self.path_for_file(:input))
+      end
+
+      def self.update_with(controls)
+        input_value = nil
+        Thread.new{
+          FDot::Based::Cubicus.instance.controls = {}
+          controls.each{|c|
+            control_uuid = FDot::Based.generate_uuid
+            FDot::Based::Cubicus.instance.controls[control_uuid] = c
+          }
+
+          FDot::Based::Cubicus.write_open_system!
+
+          # wait for user input
+          while !File.exist?(FDot::Based::Cubicus.path_for_file(:input)) ||
+            File.read(FDot::Based::Cubicus.path_for_file(:input)).empty?
+            sleep(0.1)
           end
-        end
 
-        unless self.delegate.current_controls.empty?
-          self.delegate.current_controls.each{|control|
-            control_path = File.join(
-              self.class.cubicus_space_path,
-              control[:name].to_s
-            )
+          input_value = FDot::Based::Cubicus.read_input!
+        }.join
 
-            File.open(control_path, "w+") do |f|
-              f.write(control.to_json)
-            end
-          }
-        else
-          # add keyboard movement
-          self.prompt.on(:keypress){|event|
-            return unless self.delegate.current_controls.empty?
-            case event.value.to_sym
-            when :w
-              self.prompt.trigger(:keyup)
-            when :a
-              self.prompt.trigger(:keyleft)
-            when :s
-              self.prompt.trigger(:keydown)
-            when :d
-              self.prompt.trigger(:keyright)
-            end
-          }
-          self.prompt.on(:keyup){|event|
-            self.delegate.respond_to_control(event)
-          }
-          self.prompt.on(:keydown){|event|
-            self.delegate.respond_to_control(event)
-          }
-          self.prompt.on(:keyleft){|event|
-            self.delegate.respond_to_control(event)
-          }
-          self.prompt.on(:keyright){|event|
-            self.delegate.respond_to_control(event)
-          }
-        end
+        yield(input_value)
 
+        FDot::Based::Interface.reconfigure_user_space!
+        self.write_open_system!
       end
 
-      def self.default_display
-        File.read(self.cubicus_display_path)
-      end
+      private
 
-      def self.cubicus_display_path
-        File.join(
-          self.cubicus_space_path,
-          :display.to_s
+      def prepare_f_dot_go!
+        return if File.exist?(self.class.path_for_file(:f_dot_go))
+
+        go_directory = File.join(
+          FDot.gem_directory, "lib/go"
         )
+        go_file_path = File.join(
+          go_directory, FDot::Based::Cubicus::GO_SERVER_BASENAME
+        )
+
+        raise "#{go_file_path} is not a valid file path!" unless File.exist?(go_file_path)
+
+        FileUtils.cp(File.join(go_directory, "index.html"), FDot::Based.f_dot_space_path)
+
+        puts "system(go build -o #{self.class.path_for_file(:f_dot_go)} #{go_file_path})"
+        system("go build -C #{go_directory} -o #{self.class.path_for_file(:f_dot_go)} #{go_file_path}")
+
+        raise "failed to build #{self.class.path_for_file(:f_dot_go)}!" unless File.exist?(self.class.path_for_file(:f_dot_go))
       end
 
-      def self.cubicus_space_path
-        path = File.join(
-          FDot::Based::Processor.instance.f_dot_space_override_path || ENV["HOME"],
-          FDot::Based::Cubicus::FOLDER_NAME
-        )
-        unless Dir.exist?(path)
-          FileUtils.mkdir_p(path)
-        end
+      def self.path_for_file(cubicus_file_key)
+        cubicus_file_key = cubicus_file_key.to_sym
+        raise "invalid cubicus_file_key!" unless FDot::Based::Cubicus::VALID_KEYS.include?(cubicus_file_key)
 
-        return path
+        File.join(FDot::Based.f_dot_space_path, cubicus_file_key.to_s)
       end
 
     end

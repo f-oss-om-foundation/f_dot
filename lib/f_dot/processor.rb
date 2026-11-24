@@ -19,9 +19,11 @@ module FDot
       attr_accessor :serialized_state
       attr_accessor :write_state_callback
       attr_accessor :plugin_mutex
+      attr_accessor :state_mutex
       attr_accessor :f_dot_space_override_path
       attr_accessor :is_processing
       attr_accessor :processing_mode
+      attr_accessor :default_display_override
 
       DEFAULT_SETTINGS = {
         show_history_logging: false,
@@ -39,9 +41,11 @@ module FDot
         self.serialized_state = {}
         self.write_state_callback = nil
         self.plugin_mutex = Mutex.new
+        self.state_mutex = Mutex.new
         self.f_dot_space_override_path = nil
         self.is_processing = true
         self.processing_mode = FDot::Based::Processor::MODES[:default]
+        self.default_display_override = nil
 
         FDot.state[:completed_programs] = {}
         FDot.state[:program] = nil
@@ -176,61 +180,72 @@ module FDot
         end
 
         while self.is_processing
-          FDot::Based::Interface.reconfigure_user_space!
 
-          FDot::Based.print_large_title!
+          FDot::Based::Interface.reconfigure_user_space!
+          if !default_display_override
+            FDot::Based.print_large_title!
+            self.class.print_file_contents(FDot::Based::Interface.compiler_file_path)
+          else
+            default_display_override = false
+          end
+
           user_input = self.get_user_input
           next if FDot::Based::Interface.open_main_menu?(user_input)
 
           if Dir.exist?(user_input)
             domain_name = File.basename(user_input)
             if FDot::DOMAINS[domain_name.to_sym] == FDot::DOMAINS[:user]
-              selected_variable_file_path = FDot::Based.tty_prompt_select(
+              FDot::Based.tty_prompt_select(
                 "select a variable: ", FDot::Based::Interface.user_input_options(user_input)
-              )
-              next if FDot::Based::Interface.open_main_menu?(selected_variable_file_path)
-              next if selected_variable_file_path.nil?
-              variable_uuid = FDot::Based::Interface.get_variable_uuid_from_file(
-                selected_variable_file_path
-              )
-              raise "invalid variable uuid! #{variable_uuid}" if variable_uuid.nil? ||
-                !FDot.state[:program].variables.keys.include?(variable_uuid)
+              ) {|selected_variable_file_path|
 
-              if FDot::Based::Processor.user_setting!(:debug_inspectors_enabled)
-                debugger_open = true
-                while debugger_open
-                  v = FDot.state[:program].variables[variable_uuid]
-                  variable_attribute = FDot::Based.tty_prompt_select(
-                    "select attribute: ",
-                    [{name: :close_debugger, value: :close_debugger}] + v.history_menu_options
-                  )
-                  if variable_attribute == :close_debugger
-                    debugger_open = false
-                  else
-                    puts v.send(variable_attribute)
+
+                next if FDot::Based::Interface.open_main_menu?(selected_variable_file_path)
+                next if selected_variable_file_path.nil?
+                variable_uuid = FDot::Based::Interface.get_variable_uuid_from_file(
+                  selected_variable_file_path
+                )
+                raise "invalid variable uuid! #{variable_uuid}" if variable_uuid.nil? ||
+                  !FDot.state[:program].variables.keys.include?(variable_uuid)
+
+                if FDot::Based::Processor.user_setting!(:debug_inspectors_enabled)
+                  debugger_open = true
+                  while debugger_open
+                    v = FDot.state[:program].variables[variable_uuid]
+                    FDot::Based.tty_prompt_select(
+                      "select attribute: ",
+                      [{name: :close_debugger, value: :close_debugger}] + v.history_menu_options
+                    ) {|variable_attribute|
+                      if variable_attribute == :close_debugger
+                        debugger_open = false
+                      else
+                        self.default_display_override = true
+                        puts v.send(variable_attribute)
+                      end
+                    }
                   end
                 end
-              end
-              # move for the user
-              FDot.state[:program].add_move_history(
-                FDot.state[:program].variables[variable_uuid],
-                :processor
-              )
+                # move for the user
+                FDot.state[:program].add_move_history(
+                  FDot.state[:program].variables[variable_uuid],
+                  :processor
+                )
 
-              # move for the programmer
-              programmer_variable_uuid = FDot.state[:programmer][:variables].sample
-              FDot.state[:program].add_move_history(
-                FDot.state[:program].variables[programmer_variable_uuid],
-                :processor
-              )
+                # move for the programmer
+                programmer_variable_uuid = FDot.state[:programmer][:variables].sample
+                FDot.state[:program].add_move_history(
+                  FDot.state[:program].variables[programmer_variable_uuid],
+                  :processor
+                )
 
-              if self.processing_mode == FDot::Based::Processor::MODES[:one_move]
-                unless self.write_state_callback.nil?
-                  self.write_state_callback.call(self.serialized_state, true)
+                if self.processing_mode == FDot::Based::Processor::MODES[:one_move]
+                  unless self.write_state_callback.nil?
+                    self.write_state_callback.call(self.serialized_state, true)
+                  end
+                  FDot::Based::Interface.reconfigure_user_space!
+                  break
                 end
-                FDot::Based::Interface.reconfigure_user_space!
-                break
-              end
+              }
             else
               listing_text = ["listing #{File.basename(user_input)} domain..."]
               Dir[
@@ -238,38 +253,52 @@ module FDot
               ].each{|d|
                 listing_text << d.gsub(user_input, "")
               }
+              self.default_display_override = true
               FDot::Based.less(
                 listing_text.join("\n")
               )
             end
           elsif File.exist?(user_input)
-            file_contents = JSON.parse(File.read(user_input))
-            if File.basename(user_input) == :compiler.to_s
-              file_contents["variables"] = file_contents["variables"].map{|v_uuid|
-                FDot.state[:program].variables[v_uuid].to_s
-              }
-              file_contents["instructions"] = file_contents["instructions"].map{|i_uuid|
-                FDot.state[:program].instructions[i_uuid].to_s
-              }
-            end
-
-            puts "reading #{File.basename(user_input)} file..."
-            FDot::Based.less(
-              JSON.pretty_generate(file_contents)
-            )
+            self.default_display_override = true
+            self.class.print_file_contents(user_input)
           end
         end
 
         !self.is_processing
       end
 
-      def get_user_input
-        FDot::Based.tty_prompt_select(
-          "#{self.class.name}.#{__method__}: ", FDot::Based::Interface.user_input_options
+      def self.print_file_contents(file_path)
+        raise "invalid file_path! #{file_path}" unless File.exist?(file_path)
+
+        file_contents = JSON.parse(File.read(file_path))
+        if File.basename(file_path) == :compiler.to_s
+          file_contents["variables"] = file_contents["variables"].map{|v_uuid|
+            FDot.state[:program].variables[v_uuid].to_s
+          }
+          file_contents["instructions"] = file_contents["instructions"].map{|i_uuid|
+            FDot.state[:program].instructions[i_uuid].to_s
+          }
+        end
+
+        puts "reading #{File.basename(file_path)} file..."
+        FDot::Based.less(
+          JSON.pretty_generate(file_contents)
         )
       end
 
+      def get_user_input
+        FDot::Based.tty_prompt_select(
+          "#{self.class.name}.#{__method__}: ", FDot::Based::Interface.user_input_options
+        ) {|v|
+          return v
+        }
+      end
+
       def self.user_exited!
+        FDot::Based::Cubicus.instance.ws_thread&.exit
+        FDot::Based::Cubicus.instance.ws_thread&.kill
+        FDot::Based::Cubicus.instance.ws_thread = nil
+        system("pkill f_dot") # todo: daemonize
         self.instance.is_processing = false
       end
 
@@ -277,16 +306,20 @@ module FDot
 
         settings_menu_open = true
         while settings_menu_open
-          setting_key = FDot::Based.tty_prompt_select(
+          FDot::Based.tty_prompt_select(
             "select a setting to toggle",
             [{name: :back, value: :back}] + self.instance.user_settings.map{|k, v|
               {name: "#{k}(#{v})", value: k}
             }
-          )
+          ) {|setting_key|
 
-          break if setting_key == :back
+            if setting_key == :back
+              settings_menu_open = false
+              next
+            end
 
-          set_user_setting(setting_key, !user_setting!(setting_key))
+            set_user_setting(setting_key, !user_setting!(setting_key))
+          }
         end
       end
 

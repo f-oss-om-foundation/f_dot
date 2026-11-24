@@ -78,14 +78,15 @@ module FDot
         puts "opening history #(#{self.timestamp})"
         puts self.to_s
         while interface_open
-          historical_attribute = FDot::Based.tty_prompt_select(
+          FDot::Based.tty_prompt_select(
             "viewing historical_instance #{historical_instance.to_s}",
             [{name: :back, value: :back}] + historical_instance.history_menu_options
-          )
+          ) {|historical_attribute|
 
-          return if historical_attribute == :back
+            return if historical_attribute == :back
 
-          puts historical_instance.send(historical_attribute)
+            puts historical_instance.send(historical_attribute)
+          }
         end
       end
 

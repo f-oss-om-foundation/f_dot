@@ -63,24 +63,41 @@ module FDot
     end
 
     def self.less(message)
-      IO.popen("less -X", "w") { |f| f.puts(message) }
+      if FDot::Based::Interface.instance.display_mode == FDot::DISPLAY_MODES[:websockets] ||
+        !FDot::Based::Processor.user_setting!(:debug_inspectors_enabled)
+        message.split("\n").each{|l|
+          puts l
+        }
+      else
+        IO.popen("less -X", "w") { |f| f.puts(message) }
+      end
     end
 
     def self.tty_prompt_select(
       display_text = "select something: ",
       options = []
     )
-      if options.nil? || options.empty?
-        puts "there is nothing here"
-        return
+      if FDot::Based::Interface.instance.display_mode == FDot::DISPLAY_MODES[:websockets]
+        puts display_text
+        FDot::Based::Cubicus.update_with(options) {|selected_option|
+          puts selected_option
+          yield(selected_option)
+        }
+      else
+        if options.nil? || options.empty?
+          puts "there is nothing here"
+          return
+        end
+        yield(
+          FDot::Based::PROMPT.select(
+           display_text,
+           options,
+           show_help: :always,
+           cycle: true,
+           per_page: 11
+         )
+        )
       end
-      FDot::Based::PROMPT.select(
-        display_text,
-        options,
-        show_help: :always,
-        cycle: true,
-        per_page: 11
-      )
     end
 
   end

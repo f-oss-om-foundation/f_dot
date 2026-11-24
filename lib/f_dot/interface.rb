@@ -15,6 +15,12 @@ module FDot
     class Interface
       include Singleton
 
+      attr_accessor :display_mode
+
+      def initialize
+        self.display_mode = FDot::DISPLAY_MODES[:terminal]
+      end
+
       def self.get_variable_uuid_from_file(variable_file_path)
         raise "invalid variable_file_path! #{variable_file_path}" unless File.exist?(variable_file_path)
         variable_uuid = nil
@@ -36,7 +42,9 @@ module FDot
         # get listing for path and return sorted tty-prompt options
         [{name: :f_dot_main_menu, value: :f_dot_main_menu}] + Dir[
           File.join(folder_path, "*")
-        ].map{|d|
+        ].select{|d|
+          !FDot::Based::Cubicus::VALID_KEYS.any?{|n| File.basename(d).include?(n.to_s)}
+        }.map{|d|
           {name: File.basename(d), value: d}
         }.sort_by{|o|
           sorters = [o[:name]]
@@ -51,6 +59,7 @@ module FDot
           self.show_main_menu!
           return true
         else
+          self.reconfigure_user_space!
           return false
         end
 
@@ -59,49 +68,59 @@ module FDot
       def self.show_main_menu!
         main_menu_open = true
         while main_menu_open
-          user_selection = FDot::Based.tty_prompt_select(
+          FDot::Based.tty_prompt_select(
             "f_dot_main_menu =>",
             self.main_menu_options.map{|k|
               {name: k, value: k}
             }
-          )
-
-          case user_selection
-          when :resume_program
-            main_menu_open = false
-          when :startup_notes
-            puts FDot::Based::Program.startup_notes
-          when :open_history
-            FDot.state[:program].show_history_interface!
-          when :open_settings
-            FDot::Based::Processor.show_settings_menu!
-          when :close_program
-            return FDot::Based::Processor.user_exited! if FDot::Based.tty_prompt_select(
-              "are you sure?",
-              [{name: :back, value: :back}, {name: :i_am_sure, value: :i_am_sure}]
-            ) == :i_am_sure
-          end
+          ) {|user_selection|
+            case user_selection
+            when :resume_program
+              main_menu_open = false
+            when :startup_notes
+              puts FDot::Based::Program.startup_notes
+            when :open_history
+              FDot.state[:program].show_history_interface!
+            when :open_settings
+              FDot::Based::Processor.show_settings_menu!
+            when :close_program
+              FDot::Based.tty_prompt_select(
+                "are you sure?",
+                [{name: :back, value: :back}, {name: :i_am_sure, value: :i_am_sure}]
+              ){|v|
+                if v == :i_am_sure
+                  main_menu_open = false
+                  return FDot::Based::Processor.user_exited!
+                end
+              }
+            end
+          }
         end
+      end
+
+      def self.compiler_file_path
+        File.join(
+          FDot::Based.f_dot_space_path,
+          :compiler.to_s
+        )
       end
 
       def self.reconfigure_user_space!
         # clear user space
-        FileUtils.rm_rf(FDot::Based.f_dot_space_path)
+        Dir[File.join(FDot::Based.f_dot_space_path, "*")].each{|f|
+          FileUtils.rm_rf(f) unless FDot::Based::Cubicus::VALID_KEYS.any?{|n| File.basename(f).include?(n.to_s)}
+        }
 
         # build program data
         FDot.state[:program].build_space!
 
         # write user space
-        compiler_file_path = File.join(
-          FDot::Based.f_dot_space_path,
-          :compiler.to_s
-        )
-
         compiler_data = FDot.state[:program].compiler_contents
         compiler_data[:variables] = compiler_data[:variables].sort
         compiler_data[:instructions] = compiler_data[:instructions].sort
-        File.open(compiler_file_path, "w+") do |f|
+        File.open(self.compiler_file_path, "w+") do |f|
           f.write(compiler_data.to_json)
+          f.fsync
         end
 
         unless FDot.state[:based_uuid].nil?
@@ -117,6 +136,7 @@ module FDot
             f.write({
               uuid: based_variable.uuid
             }.to_json)
+            f.fsync
           end
         end
 
@@ -141,6 +161,7 @@ module FDot
               f.write({
                 uuid: v
               }.to_json)
+              f.fsync
             end
           }
         }
@@ -152,12 +173,14 @@ module FDot
             variables: FDot.state[:f_dot_queue],
             instructions: FDot.state[:instructions]
           }.to_json)
+          f.fsync
         end
 
         # write processor serialized_state file
         serialized_state_file_path = File.join(FDot::Based.f_dot_space_path, "processor_state.json")
         File.open(serialized_state_file_path, "w+") do |f|
           f.write(FDot::Based::Processor.instance.serialized_state.to_json)
+          f.fsync
         end
 
         return true

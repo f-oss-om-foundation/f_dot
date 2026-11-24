@@ -18,6 +18,7 @@ module FDot
       attr_accessor :variables
       attr_accessor :instructions
       attr_accessor :history
+      attr_accessor :compiler_mutex
 
       def initialize(state_uuid = nil)
         puts "#{self}.#{__method__}"
@@ -25,6 +26,7 @@ module FDot
         self.variables = {}
         self.instructions = {}
         self.history = {}
+        self.compiler_mutex = Mutex.new
 
         generate_variables!
       end
@@ -92,6 +94,7 @@ module FDot
 
       # primary read of compiler contents
       def compiler_contents
+        return @complier_contents unless @complier_contents.nil?
         # a variable or instruction is considered inside of
         # compiler_contents if it is not in any of the
         # following domains:
@@ -102,20 +105,23 @@ module FDot
         #
         # note => :based_variable is not strictly a domain
         #
+        self.compiler_mutex.synchronize do
+          @complier_contents = {
+            variables: self.variables.select{|k, v|
+              k != FDot.state[:based_uuid] &&
+              !FDot.state[:f_dot_queue].include?(k) &&
+              !FDot.state[:programmer][:variables].include?(k) &&
+              !FDot.state[:user][:variables].include?(k) &&
+              !self.instructions.any?{|i_uuid, i_instance| i_instance.variable_uuids.include?(k)}
+            }.map{|k, v| k},
+            instructions: self.instructions.select{|k, v|
+              !FDot.state[:programmer][:instructions].include?(k) &&
+              !FDot.state[:user][:instructions].include?(k)
+            }.map{|k, v| k},
+          }
+        end
 
-        {
-          variables: self.variables.select{|k, v|
-            k != FDot.state[:based_uuid] &&
-            !FDot.state[:f_dot_queue].include?(k) &&
-            !FDot.state[:programmer][:variables].include?(k) &&
-            !FDot.state[:user][:variables].include?(k) &&
-            !self.instructions.any?{|i_uuid, i_instance| i_instance.variable_uuids.include?(k)}
-          }.map{|k, v| k},
-          instructions: self.instructions.select{|k, v|
-            !FDot.state[:programmer][:instructions].include?(k) &&
-            !FDot.state[:user][:instructions].include?(k)
-          }.map{|k, v| k},
-        }
+        @complier_contents
       end
 
       # deal out one variable
@@ -215,6 +221,7 @@ module FDot
 
       def compile!(lineage_uuid)
         raise "invalid lineage_uuid" unless history.keys.include?(lineage_uuid)
+        @complier_contents = nil
         history_instance = history[lineage_uuid].last
         compile_instructions!(history_instance)
         compile_variables!(history_instance)
@@ -224,25 +231,29 @@ module FDot
       def show_history_interface!
         history_menu_open = true
         while history_menu_open
-          to_show_history_uuid = FDot::Based.tty_prompt_select(
+          FDot::Based.tty_prompt_select(
             "which item do you want to view the history for?",
             [{name: :back, value: :back}] + self.history_menu_options
-          )
+          ) {|to_show_history_uuid|
 
-          break if to_show_history_uuid == :back
+            if to_show_history_uuid == :back
+              history_menu_open = false
+              next
+            end
+            FDot::Based.tty_prompt_select(
+              "which record would you like to open?",
+              [{name: :back, value: :back}] + self.history_menu_options_for(to_show_history_uuid)
+            ) {|history_timestamp|
 
-          history_timestamp = FDot::Based.tty_prompt_select(
-            "which record would you like to open?",
-            [{name: :back, value: :back}] + self.history_menu_options_for(to_show_history_uuid)
-          )
+              next if history_timestamp == :back
 
-          next if history_timestamp == :back
+              history_instance = self.history[to_show_history_uuid].select{|h| h.timestamp == history_timestamp}.first
 
-          history_instance = self.history[to_show_history_uuid].select{|h| h.timestamp == history_timestamp}.first
+              raise "invalid history_instance!" if history_instance.nil?
 
-          raise "invalid history_instance!" if history_instance.nil?
-
-          history_instance.show_interface!
+              history_instance.show_interface!
+            }
+          }
         end
 
       end
@@ -361,7 +372,9 @@ module FDot
         FDot::Based.tty_prompt_select(
           "press enter to continue",
           [{name: :start, value: :start}, {name: :close_program, value: :close_program}]
-        )
+        ) {|v|
+          return v
+        }
       end
 
       def f_dot_de_queue!
@@ -392,25 +405,27 @@ module FDot
             while get_combinable_variables.any?
               puts JSON.pretty_generate(get_combinable_variables)
               # prompt user to choose an instruction to combine
-              to_combine_variable_uuid = FDot::Based.tty_prompt_select(
+              FDot::Based.tty_prompt_select(
                 "combinable_variables: ",
                 get_combinable_variables.map{|variable_instance|
                   {name: variable_instance.to_s, value: variable_instance.uuid}
                 }
-              )
-              to_combine_instance = self.variables[to_combine_variable_uuid]
-              raise "invalid to_combine_instance!" if to_combine_instance.nil?
+              ) {|to_combine_variable_uuid|
+                to_combine_instance = self.variables[to_combine_variable_uuid]
+                raise "invalid to_combine_instance!" if to_combine_instance.nil?
 
-              puts "listing variables combinable with #{to_combine_instance.to_s}..."
-              with_variable_uuid = FDot::Based.tty_prompt_select(
-                "combine #{to_combine_instance.to_s} with?",
-                get_variables_combinable_with(to_combine_variable_uuid).map{|variable_instance|
-                  {name: variable_instance.to_s, value: variable_instance.uuid}
+                puts "listing variables combinable with #{to_combine_instance.to_s}..."
+                FDot::Based.tty_prompt_select(
+                  "combine #{to_combine_instance.to_s} with?",
+                  get_variables_combinable_with(to_combine_variable_uuid).map{|variable_instance|
+                    {name: variable_instance.to_s, value: variable_instance.uuid}
+                  }
+                ) {|with_variable_uuid|
+                  with_instance = self.variables[with_variable_uuid]
+
+                  add_combine_history(to_combine_instance, with_instance)
                 }
-              )
-              with_instance = self.variables[with_variable_uuid]
-
-              add_combine_history(to_combine_instance, with_instance)
+              }
             end
           end
         end
@@ -430,25 +445,27 @@ module FDot
             # manually compile
             puts "#{__method__}"
             puts "listing instructions to compile..."
-            to_combine_instruction_uuid = FDot::Based.tty_prompt_select(
+            FDot::Based.tty_prompt_select(
               "combinable_instructions: ",
               get_combinable_instructions.map{|instruction_instance|
                 {name: instruction_instance.to_s, value: instruction_instance.uuid}
               }
-            )
-            to_combine_instance = self.instructions[to_combine_instruction_uuid]
-            raise "invalid to_combine_instance!" if to_combine_instance.nil?
+            ) {|to_combine_instruction_uuid|
+              to_combine_instance = self.instructions[to_combine_instruction_uuid]
+              raise "invalid to_combine_instance!" if to_combine_instance.nil?
 
-            puts "listing instructions combinable with #{to_combine_instance.to_s}..."
-            with_instruction_uuid = FDot::Based.tty_prompt_select(
-              "combine #{to_combine_instance.to_s} with?",
-              get_instructions_combinable_with(to_combine_instruction_uuid).map{|instruction_instance|
-                {name: instruction_instance.to_s, value: instruction_instance.uuid}
+              puts "listing instructions combinable with #{to_combine_instance.to_s}..."
+              FDot::Based.tty_prompt_select(
+                "combine #{to_combine_instance.to_s} with?",
+                get_instructions_combinable_with(to_combine_instruction_uuid).map{|instruction_instance|
+                  {name: instruction_instance.to_s, value: instruction_instance.uuid}
+                }
+              ) {|with_instruction_uuid|
+                with_instance = self.instructions[with_instruction_uuid]
+
+                add_combine_history(to_combine_instance, with_instance)
               }
-            )
-            with_instance = self.instructions[with_instruction_uuid]
-
-            add_combine_history(to_combine_instance, with_instance)
+            }
           end
         end
       end

@@ -20,7 +20,7 @@ Gem::Specification.new do |spec|
   spec.authors = ["i2097i"]
   spec.email = ["i2097i@hotmail.com"]
 
-  spec.description   = GEM_DESCRIPTION + "\n#{FDot::VERSION} release notes: #{FDot::RELEASE_NOTES}"
+  spec.description   = GEM_DESCRIPTION + "| v#{FDot::VERSION} | release notes: #{FDot::RELEASE_NOTES}"
   spec.summary       = GEM_DESCRIPTION
   spec.homepage      = "https://github.com/f-oss-om-foundation/f_dot"
   spec.license       = "MIT"

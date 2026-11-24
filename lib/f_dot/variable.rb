@@ -90,9 +90,9 @@ module FDot
           :ordinal,
           :number_key,
           :domain_key
-        ].each{|attribute|
+        ].map{|attribute|
           {
-            name: "#{attribute}: #{self.send(attribute)}",
+            name: attribute,
             value: attribute
           }
         }

@@ -29,7 +29,18 @@ module FDot
     user: 2
   }
 
+  DISPLAY_MODES = {
+    terminal: 0,
+    websockets: 1
+  }
+
   def self.state
     Thread.main[:f_dot_state] ||= {}
+  end
+
+  def self.gem_directory
+    Dir[
+      Gem.loaded_specs[:f_dot.to_s.downcase]&.full_gem_path
+    ].first
   end
 end

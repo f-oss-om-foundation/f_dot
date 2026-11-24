@@ -66,13 +66,13 @@ module FDot
           :ordinal,
           :compiled_domain,
           :compiler_variable_uuid
-        ].each{|attribute|
+        ].map{|attribute|
           implementation_notes = ""
           if [:compiled_domain, :compiler_variable_uuid].include?(attribute)
-            implementation_notes = "todo: #{attribute} is not implemented."
+            implementation_notes = " (todo: #{attribute} is not implemented.)"
           end
           {
-            name: "#{attribute}: #{self.send(attribute) || nil.to_s}#{implementation_notes}",
+            name: "#{attribute}#{implementation_notes}",
             value: attribute
           }
         }
