@@ -16,9 +16,6 @@ require :f_dot.to_s
 
 begin
   if ARGV[0]&.strip&.to_sym == :cubicus
-    $stdout.reopen(FDot::Based::Cubicus.path_for_file(:display), "w")
-    $stdout.sync = true
-
     # start in FDot::DISPLAY_MODES[:websockets] display_mode
     # start websocket thread
     FDot::Based::Cubicus.instance.start_ws_thread
@@ -29,5 +26,5 @@ begin
 rescue StandardError => e
   puts "rescued in f_dot bin for #{e}"
   puts Thread.current.backtrace
-  exit
+  raise e
 end

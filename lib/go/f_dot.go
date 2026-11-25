@@ -13,8 +13,9 @@ import (
   "net/http"
   "html/template"
   "os"
-  "strings"
-  "time"
+  // "strings"
+  // "time"
+  "sync"
   "path/filepath"
   "github.com/gorilla/websocket"
   "golang.org/x/net/http2"
@@ -34,17 +35,51 @@ var indexHtmlTemplate = template.Must(template.New("").Parse("<html></html>"))
 var displayFileName = "display"
 var controlsFileName = "controls"
 var inputFileName = "input"
+var connManager = newConnManager()
 
-func writeDisplay(ws *websocket.Conn, displayFileData []byte) {
-  log.Print("writing ", displayFileName)
-  for _, line := range strings.Split(string(displayFileData), "\n") {
-    ws.WriteMessage(websocket.TextMessage, []byte(line))
+type ConnManager struct {
+  mu      sync.RWMutex
+  clients map[*websocket.Conn]bool
+}
+
+func newConnManager() *ConnManager {
+  return &ConnManager{
+    clients: make(map[*websocket.Conn]bool),
   }
 }
 
-func writeControls(ws *websocket.Conn, controlsFileData []byte) {
-  log.Print("writing ", controlsFileName)
-  ws.WriteMessage(websocket.TextMessage, controlsFileData)
+func (m *ConnManager) add(conn *websocket.Conn) {
+  m.mu.Lock()
+  defer m.mu.Unlock()
+  m.clients[conn] = true
+}
+
+func (m *ConnManager) remove(conn *websocket.Conn) {
+  m.mu.Lock()
+  defer m.mu.Unlock()
+  delete(m.clients, conn)
+}
+
+func (m *ConnManager) broadcast(message []byte) {
+  m.mu.Lock()
+  defer m.mu.Unlock()
+
+  for conn := range m.clients {
+    err := conn.WriteMessage(websocket.TextMessage, message)
+    if err != nil {
+      log.Printf("Broadcast error, removing client: %v", err)
+      conn.Close()
+      delete(m.clients, conn)
+    }
+  }
+}
+
+func writeDisplay(displayFileData []byte) {
+  connManager.broadcast(displayFileData)
+  // log.Print("writing ", displayFileName)
+  // for _, line := range strings.Split(string(displayFileData), "\n") {
+    // connManager.broadcast([]byte(line))
+  // }
 }
 
 func render(w http.ResponseWriter, r *http.Request) {
@@ -55,6 +90,8 @@ func render(w http.ResponseWriter, r *http.Request) {
     return
   }
   defer c.Close()
+
+  connManager.add(c)
 
   path, err := os.Executable()
   if err != nil {
@@ -67,7 +104,7 @@ func render(w http.ResponseWriter, r *http.Request) {
   if err != nil {
     log.Print("failed to read:", displayFileName)
   } else {
-    writeDisplay(c, displayFileData)
+    writeDisplay(displayFileData)
   }
 
   // send controls file
@@ -75,7 +112,7 @@ func render(w http.ResponseWriter, r *http.Request) {
   if err != nil {
     log.Print("failed to read:", controlsFileName)
   } else {
-    writeControls(c, controlsFileData)
+    connManager.broadcast(controlsFileData)
   }
 
   type wsMessage struct {
@@ -112,32 +149,6 @@ func render(w http.ResponseWriter, r *http.Request) {
       if err != nil {
         log.Fatal(err)
       }
-
-      time.Sleep(222 * time.Millisecond)
-
-      path, err := os.Executable()
-      if err != nil {
-        log.Print("path, err := os.Executable() error!", err)
-      }
-      var f_dot_dir = filepath.Dir(path)
-      log.Print("os.ReadDir(f_dot_dir)", f_dot_dir+"/")
-      os.ReadDir(f_dot_dir+"/")
-
-      // send display file
-      displayFileData, err := os.ReadFile(pathForFilename(displayFileName))
-      if err != nil {
-        log.Print("failed to read:", displayFileName)
-      } else {
-        writeDisplay(c, displayFileData)
-      }
-
-      // send controls file
-      controlsFileData, err := os.ReadFile(pathForFilename(controlsFileName))
-      if err != nil {
-        log.Print("failed to read:", controlsFileName)
-      } else {
-        writeControls(c, controlsFileData)
-      }
     }
   }
 }
@@ -146,11 +157,32 @@ func html(w http.ResponseWriter, r *http.Request) {
   indexHtmlTemplate.Execute(w, struct{}{})
 }
 
+func ready() {
+  log.Print("got ready from f_dot")
+  // send display file
+  displayFileData, err := os.ReadFile(pathForFilename(displayFileName))
+  if err != nil {
+    log.Print("failed to read:", displayFileName)
+  } else {
+    writeDisplay(displayFileData)
+  }
+
+  // send controls file
+  controlsFileData, err := os.ReadFile(pathForFilename(controlsFileName))
+  if err != nil {
+    log.Print("failed to read:", controlsFileName)
+  } else {
+    connManager.broadcast([]byte(controlsFileData))
+  }
+}
+
 func handler(wr http.ResponseWriter, req *http.Request) {
   defer req.Body.Close()
 
   if websocket.IsWebSocketUpgrade(req) {
     render(wr, req)
+  } else if req.URL.Path == "/ready" {
+    ready()
   } else if req.URL.Path == "/" {
     html(wr, req)
   }

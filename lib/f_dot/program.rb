@@ -331,8 +331,8 @@ module FDot
 
       def check_for_based_conditions!
         return unless ready_to_based?
-
         puts "running based checksum"
+        @complier_contents = nil
         compile_variables = compiler_contents[:variables]
         (compile_variables + [FDot.state[:based_uuid]]).each{|v_uuid|
           variable = self.variables[v_uuid]
@@ -342,7 +342,7 @@ module FDot
           raise "checksum failed!" if ordinal_instruction.nil?
           variable.combine_with_instruction(ordinal_instruction)
         }
-
+        @complier_contents = nil
         compile_variables = compiler_contents[:variables]
         raise "based failed!" unless compile_variables.count == 0
 

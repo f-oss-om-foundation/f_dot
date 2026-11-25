@@ -24,9 +24,9 @@ module FDot
       ]
 
       attr_accessor :ws_thread
-      attr_accessor :ws_busy
       attr_accessor :controls
       attr_accessor :is_running
+      attr_accessor :original_stdout
 
       FOLDER_NAME = ".cubicus"
 
@@ -36,24 +36,36 @@ module FDot
         self.is_running = false
         self.ws_thread = nil
         self.controls = {}
-        @ws_busy = false
-
-        puts "starting control loop"
-        # self.start_ws_thread
       end
 
       def start_ws_thread
-        return if @ws_busy
-        @ws_busy = true
         self.ws_thread&.exit
         self.ws_thread&.kill
 
-        go_server_path = self.class.path_for_file(:f_dot_go)
-        prepare_f_dot_go! unless File.exist?(go_server_path)
+        prepare_f_dot_go!
+
         FDot::Based::Interface.instance.display_mode = FDot::DISPLAY_MODES[:websockets]
-        # self.ws_thread = Thread.new do
-          `#{go_server_path} > #{go_server_path}.log 2>&1 &`
-        # end
+        go_server_path = self.class.path_for_file(:f_dot_go)
+
+        self.original_stdout = $stdout
+        $stdout.reopen(self.class.path_for_file(:display), "w")
+        $stdout.sync = true
+        self.ws_thread = Thread.new do
+          system("#{go_server_path} > #{go_server_path}.log 2>&1")
+        end
+      end
+
+      def self.run_exit_cleanup!
+        return unless FDot::Based::Interface.instance.display_mode == FDot::DISPLAY_MODES[:websocket]
+
+        self.write_open_system!
+        if $stdout != FDot::Based::Cubicus.instance.original_stdout
+          $stdout = FDot::Based::Cubicus.instance.original_stdout
+        end
+        FDot::Based::Cubicus.instance.ws_thread&.exit
+        FDot::Based::Cubicus.instance.ws_thread&.kill
+        FDot::Based::Cubicus.instance.ws_thread = nil
+        system("pkill f_dot") # todo: daemonize
       end
 
       def self.read_input!
@@ -68,10 +80,9 @@ module FDot
       end
 
       def self.write_open_system!
-        # # write current display
-        # File.open(self.path_for_file(:display), "w+") do |f|
-        #   f.write(self.instance.display.to_json)
-        # end
+        # write current display
+        $stdout.sync = true
+        $stdout.flush
 
         # write current controls
         File.open(self.path_for_file(:controls), "w") do |f|
@@ -83,6 +94,9 @@ module FDot
 
         # clear last input
         FileUtils.rm_rf(self.path_for_file(:input))
+
+        system("curl -s http://localhost:8080/ready")
+        $stdout.reopen(FDot::Based::Cubicus.path_for_file(:display), "w")
       end
 
       def self.update_with(controls)
@@ -98,7 +112,7 @@ module FDot
 
           # wait for user input
           while !File.exist?(FDot::Based::Cubicus.path_for_file(:input)) ||
-            File.read(FDot::Based::Cubicus.path_for_file(:input)).empty?
+            (File.read(FDot::Based::Cubicus.path_for_file(:input)) || "").empty?
           end
 
           input_value = FDot::Based::Cubicus.read_input!
@@ -110,8 +124,6 @@ module FDot
       private
 
       def prepare_f_dot_go!
-        return if File.exist?(self.class.path_for_file(:f_dot_go))
-
         go_directory = File.join(
           FDot.gem_directory, "lib/go"
         )
@@ -121,7 +133,10 @@ module FDot
 
         raise "#{go_file_path} is not a valid file path!" unless File.exist?(go_file_path)
 
+        puts "update index.html in .f_dot directory: (#{File.join(go_directory, "index.html")}, #{FDot::Based.f_dot_space_path})"
         FileUtils.cp(File.join(go_directory, "index.html"), FDot::Based.f_dot_space_path)
+
+        return if File.exist?(self.class.path_for_file(:f_dot_go))
 
         puts "system(go build -o #{self.class.path_for_file(:f_dot_go)} #{go_file_path})"
         system("go build -C #{go_directory} -o #{self.class.path_for_file(:f_dot_go)} #{go_file_path}")

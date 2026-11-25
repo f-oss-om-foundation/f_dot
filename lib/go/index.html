@@ -1,14 +1,10 @@
 <html>
+  <meta charset="UTF-8">
   <head>
     <title>open_system</title>
   </head>
   <style>
-
-    a {
-      pointer-events: none;
-      cursor: default; /* Optional: ensures the standard arrow cursor shows */
-    }
-    a:hover {
+    button pre {
       pointer-events: none;
     }
   </style>
@@ -32,12 +28,22 @@
     // window.scrollTo(0,document.body.scrollHeight);
   }
 
+  function escapeHtml(unsafe) {
+    return String(unsafe ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   function tap(ev) {
     try {
       var parsed = JSON.parse(ev.data)
       var controlsHtml = "<div>"
       for(i = 0; i < parsed.length; i++) {
-        controlsHtml = controlsHtml + "<button onclick=\"sendControl(event)\" id=" + parsed[i].uuid + ">" + parsed[i].name + "</button>"
+        // console.error(`parsed[${i}]: ${parsed[i]}`)
+        controlsHtml = controlsHtml + `<button id="${parsed[i].uuid}" onclick="sendControl(event)"><pre>${escapeHtml(parsed[i].name)}</pre></button>`
       }
       controlsHtml = controlsHtml + "</div>"
       document.getElementById('controls').innerHTML = controlsHtml
@@ -50,7 +56,7 @@
         document.getElementById('controls').scrollIntoView({
           block: "end"
         });
-      }, 100);
+      }, 55);
     }
   }
 

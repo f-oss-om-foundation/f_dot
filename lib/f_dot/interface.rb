@@ -184,7 +184,6 @@ module FDot
           f.write(FDot::Based::Processor.instance.serialized_state.to_json)
           f.fsync
         end
-
         return true
       end
 

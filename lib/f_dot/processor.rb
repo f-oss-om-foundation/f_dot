@@ -45,7 +45,7 @@ module FDot
         self.f_dot_space_override_path = nil
         self.is_processing = true
         self.processing_mode = FDot::Based::Processor::MODES[:default]
-        self.default_display_override = nil
+        self.default_display_override = false
 
         FDot.state[:completed_programs] = {}
         FDot.state[:program] = nil
@@ -182,14 +182,15 @@ module FDot
         while self.is_processing
 
           FDot::Based::Interface.reconfigure_user_space!
-          if !default_display_override
+          if !self.default_display_override
             FDot::Based.print_large_title!
             self.class.print_file_contents(FDot::Based::Interface.compiler_file_path)
           else
-            default_display_override = false
+            self.default_display_override = false
           end
 
           user_input = self.get_user_input
+
           next if FDot::Based::Interface.open_main_menu?(user_input)
 
           if Dir.exist?(user_input)
@@ -293,10 +294,7 @@ module FDot
       end
 
       def self.user_exited!
-        FDot::Based::Cubicus.instance.ws_thread&.exit
-        FDot::Based::Cubicus.instance.ws_thread&.kill
-        FDot::Based::Cubicus.instance.ws_thread = nil
-        system("pkill f_dot") # todo: daemonize
+        FDot::Based::Cubicus.run_exit_cleanup!
         self.instance.is_processing = false
       end
 
