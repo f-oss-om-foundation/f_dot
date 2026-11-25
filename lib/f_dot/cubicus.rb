@@ -135,8 +135,13 @@ module FDot
 
         raise "#{go_file_path} is not a valid file path!" unless File.exist?(go_file_path)
 
-        puts "update index.html in .f_dot directory: (#{File.join(go_directory, "index.html")}, #{FDot::Based.f_dot_space_path})"
-        FileUtils.cp(File.join(go_directory, "index.html"), FDot::Based.f_dot_space_path)
+        puts "ensure index.html exists in .f_dot directory:"
+        puts "(#{File.join(go_directory, "html/index.html")}, #{FDot::Based.f_dot_space_path})"
+        FileUtils.cp(File.join(go_directory, "html/index.html"), FDot::Based.f_dot_space_path)
+
+        puts "ensure .f_dot/javascript directory exists:"
+        puts "(#{File.join(go_directory, "javascript")}, #{FDot::Based.f_dot_space_path})"
+        FileUtils.cp_r(File.join(go_directory, "javascript"), FDot::Based.f_dot_space_path)
 
         return if File.exist?(self.class.path_for_file(:f_dot_go))
 

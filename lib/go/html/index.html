@@ -1,7 +1,10 @@
-<html>
-  <meta charset="UTF-8">
+<!doctype html>
+<html lang="en">
   <head>
+    <meta charset="UTF-8">
     <title>open_system</title>
+    <script type="application/javascript" src="javascript/gl-matrix-min.js"></script>
+    <script type="module" src="javascript/f_dot.js"></script>
   </head>
   <style>
     #controls {
@@ -23,25 +26,30 @@
     button pre {
       pointer-events: none;
     }
+
+    canvas {
+      position: absolute;
+      z-index: 9;
+      right: 0;
+      top: 0;
+    }
   </style>
   <body>
+    <canvas id="gl-canvas" width="640" height="480"></canvas>
     <pre id="display"></pre>
     <div id="console"></div>
     <div id="controls"></div>
   </body>
   <script>
   var ws
-  var messageDelay = 1500
-  var connectDelay = 5000
+  var connectDelay = 4444
   var autoReconnect = true;
+  var connectTimer = null
+  var counter = 0
+  var lastMessageWasTimeout = false
 
-  function log(text, classes) {
-    var node = document.createElement("div");
-    console.log(text, classes)
-    // node.textContent = text;
-    // node.className = classes
-    // document.getElementById('console').appendChild(node);
-    // window.scrollTo(0,document.body.scrollHeight);
+  function sendControl(event) {
+    ws.send(JSON.stringify({"uuid": event.target.getAttribute("id")})+"\n");
   }
 
   function escapeHtml(unsafe) {
@@ -53,41 +61,33 @@
       .replace(/'/g, '&#39;');
   }
 
-  function tap(ev) {
+  function processMessage(wsEvent) {
+    // rely on json parser exception
     try {
-      var parsed = JSON.parse(ev.data)
+      // if pars-able, it is implicitly controls
+      var parsed = JSON.parse(wsEvent.data)
       var controlsHtml = ""
       for(i = 0; i < parsed.length; i++) {
-        // console.error(`parsed[${i}]: ${parsed[i]}`)
         controlsHtml = controlsHtml + `<button id="${parsed[i].uuid}" onclick="sendControl(event)"><pre>${escapeHtml(parsed[i].name)}</pre></button>`
       }
       document.getElementById('controls').innerHTML = controlsHtml
     } catch (error) {
-      // assume display
+      // otherwise assume display
       var node = document.createElement("div");
       node.className = "display_text"
-      node.textContent = ev.data
+      node.textContent = wsEvent.data
       document.getElementById('display').appendChild(node);
       setTimeout(function() {
         document.getElementById('controls').scrollIntoView({
           block: "end"
         });
-      }, 55);
+      }, 44);
     }
   }
 
-  var connectTimer = null
-  var counter = 0
-  var lastMessageWasTimeout = false
-
-  function sendControl(event) {
-    ws.send(JSON.stringify({"uuid": event.target.getAttribute("id")})+"\n");
-  }
-
   function connect() {
-    log('attempting to connect', 'info')
+    console.log('attempting to connect', 'info')
 
-    autoReconnect = true;
     lastMessageWasTimeout = false; // Reset timeout flag for new connection
 
     ws = new WebSocket(
@@ -95,21 +95,18 @@
         ? 'wss://' + window.location.host + "/render"
         : 'ws://' + window.location.host + "/render"
     );
-    console.error(ws)
 
     ws.onopen = function (ev) {
-
-      console.log(ev);
-      log('connected', 'info');
+      console.log('onopen', ev);
 
       // Reset timeout flag on new connection
       lastMessageWasTimeout = false;
 
       ws.onclose = function (ev) {
-        console.log('WebSocket close event:', ev);
-        console.log('Close code:', ev.code);
-        console.log('Close reason:', ev.reason);
-        console.log('Was clean:', ev.wasClean);
+        console.log('onclose', ev);
+        console.log('code:', ev.code);
+        console.log('reason:', ev.reason);
+        console.log('clean:', ev.wasClean);
 
         clearTimeout(connectTimer);
 
@@ -131,55 +128,54 @@
           if (!lastMessageWasTimeout) {
             // Only log if we didn't already log in onmessage
             var timeoutReason = ev.reason || 'Connection closed by server due to timeout';
-            log('SERVER TIMEOUT: ' + timeoutReason, 'error');
-            log('Connection terminated by server - no auto-reconnect', 'error');
+            console.log('SERVER TIMEOUT: ' + timeoutReason, 'error');
+            console.log('Connection terminated by server - no auto-reconnect', 'error');
           }
-          log('To reconnect, click the Connect button', 'info');
+          console.log('To reconnect, click the Connect button', 'info');
 
           // Reset the flag for next connection
           lastMessageWasTimeout = false;
         } else if (autoReconnect) {
-          log('disconnected, reconnecting in ' + (connectDelay / 1000) + ' seconds', 'info');
+          console.log('disconnected, reconnecting in ' + (connectDelay / 1000) + ' seconds', 'info');
           connectTimer = setTimeout(connect, connectDelay);
         } else {
-          log('disconnected', 'info');
+          console.log('disconnected', 'info');
         }
       } // ws.onclose
       ws.onerror = function (ev) {
-        console.log(ev);
-        log('an error occurred');
+        console.log('onerror', ev);
       } // ws.onerror
     }; // ws.onopen
     ws.onmessage = function (ev) {
-      console.log(ev);
+      console.log('onmessage', ev);
 
       // Check if this is a timeout message
       if (ev.data && ev.data.includes && ev.data.includes('Connection timeout')) {
         lastMessageWasTimeout = true;
         autoReconnect = false; // Disable auto-reconnect immediately
 
-            // Log the timeout message prominently
-            log('SERVER TIMEOUT: ' + ev.data, 'error');
-        log('Connection will close - no auto-reconnect', 'error');
+        // Log the timeout message prominently
+        console.log('SERVER TIMEOUT: ' + ev.data, 'error');
+        console.log('Connection will close - no auto-reconnect', 'error');
         return; // Don't log as regular message
       }
 
-      log(ev.data, 'recv');
-      tap(ev);
+      console.log(ev.data, 'recv');
+      processMessage(ev);
     } // ws.onmessage
     ws.onerror = function (ev) {
-      console.log(ev);
+      console.log('onerror', ev);
       clearTimeout(connectTimer);
 
       if (autoReconnect) {
-        log('unable to connect, retrying in ' + (connectDelay / 1000) + ' seconds', 'error');
+        lconsole.og('unable to connect, retrying in ' + (connectDelay / 1000) + ' seconds', 'error');
         connectTimer = setTimeout(connect, connectDelay);
       } else {
-        log('unable to connect', 'error');
-        log('disconnected', 'info');
+        console.log('disconnected', 'info');
       }
     } // ws.onerror
   }
-  connect()
+
+  connect();
   </script>
 </html>

@@ -13,8 +13,9 @@ import (
   "net/http"
   "html/template"
   "os"
-  // "strings"
+  "strings"
   // "time"
+  "path"
   "sync"
   "path/filepath"
   "github.com/gorilla/websocket"
@@ -76,15 +77,11 @@ func (m *ConnManager) broadcast(message []byte) {
 
 func writeDisplay(displayFileData []byte) {
   connManager.broadcast(displayFileData)
-  // log.Print("writing ", displayFileName)
-  // for _, line := range strings.Split(string(displayFileData), "\n") {
-    // connManager.broadcast([]byte(line))
-  // }
 }
 
-func render(w http.ResponseWriter, r *http.Request) {
-  log.Print("starting render:", r)
-  c, err := upgrader.Upgrade(w, r, nil)
+func render(w http.ResponseWriter, req *http.Request) {
+  log.Print("starting render:", req)
+  c, err := upgrader.Upgrade(w, req, nil)
   if err != nil {
     log.Print("upgrade:", err)
     return
@@ -153,8 +150,25 @@ func render(w http.ResponseWriter, r *http.Request) {
   }
 }
 
-func html(w http.ResponseWriter, r *http.Request) {
+func html(w http.ResponseWriter, req *http.Request) {
   indexHtmlTemplate.Execute(w, struct{}{})
+}
+
+func javascript(w http.ResponseWriter, req *http.Request) {
+  fileName := path.Base(req.URL.Path)
+  w.Header().Set("Content-Type", "application/javascript; charset=UTF-8")
+
+  http.ServeFile(w, req, pathForFilename("javascript/"+fileName))
+  // log.Print("rendering javascript: ", fileName)
+  // fileTemplate := template.Must(template.ParseFiles(pathForFilename("javascript/"+fileName)))
+
+  // err := fileTemplate.Execute(w, struct{}{})
+
+  // if err != nil {
+  //   log.Println("error:", err)
+  //   http.Error(w, "template parse error", http.StatusInternalServerError)
+  //   return
+  // }
 }
 
 func ready() {
@@ -185,6 +199,8 @@ func handler(wr http.ResponseWriter, req *http.Request) {
     ready()
   } else if req.URL.Path == "/" {
     html(wr, req)
+  } else if strings.Contains(req.URL.Path, "/javascript/") {
+    javascript(wr, req)
   }
 }
 
@@ -198,9 +214,15 @@ func pathForFilename(f string) string {
   return filepath.Dir(path)+"/"+f
 }
 
+func serveJavascript() {
+  mux := http.NewServeMux()
+  // Serve everything inside ./javascript under the /javascript/ URL path
+  fs := http.FileServer(http.Dir("./javascript"))
+  mux.Handle("/javascript/", http.StripPrefix("/javascript/", fs))
+}
+
 func main() {
   indexHtmlTemplate = template.Must(template.ParseFiles(pathForFilename("index.html")))
-
   http.ListenAndServe(
     "0.0.0.0:"+port,
     h2c.NewHandler(
