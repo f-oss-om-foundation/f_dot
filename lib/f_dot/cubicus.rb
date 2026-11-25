@@ -27,6 +27,7 @@ module FDot
       attr_accessor :controls
       attr_accessor :is_running
       attr_accessor :original_stdout
+      attr_accessor :controls_delegate
 
       FOLDER_NAME = ".cubicus"
 
@@ -36,6 +37,7 @@ module FDot
         self.is_running = false
         self.ws_thread = nil
         self.controls = {}
+        self.controls_delegate = nil
       end
 
       def start_ws_thread

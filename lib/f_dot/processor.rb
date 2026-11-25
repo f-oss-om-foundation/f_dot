@@ -242,7 +242,7 @@ module FDot
                     self.write_state_callback.call(self.serialized_state, true)
                   end
                   FDot::Based::Interface.reconfigure_user_space!
-                  break
+                  self.class.user_exited!
                 end
               }
             else
