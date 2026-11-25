@@ -202,7 +202,7 @@ func main() {
   indexHtmlTemplate = template.Must(template.ParseFiles(pathForFilename("index.html")))
 
   http.ListenAndServe(
-    ":"+port,
+    "0.0.0.0:"+port,
     h2c.NewHandler(
       http.HandlerFunc(handler),
       &http2.Server{},

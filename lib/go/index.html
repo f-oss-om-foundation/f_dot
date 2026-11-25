@@ -4,6 +4,22 @@
     <title>open_system</title>
   </head>
   <style>
+    #controls {
+      display: flex;
+      overflow-x: auto;
+    }
+    div.display_text {
+      overflow-y: auto;
+      border-left: solid 1px blue;
+      padding-left: 4px;
+    }
+    button {
+      background: transparent;
+      border: none;
+      border-left: 1px dotted purple;
+      font-weight: bolder;
+      margin: 4px 17px;
+    }
     button pre {
       pointer-events: none;
     }
@@ -40,16 +56,16 @@
   function tap(ev) {
     try {
       var parsed = JSON.parse(ev.data)
-      var controlsHtml = "<div>"
+      var controlsHtml = ""
       for(i = 0; i < parsed.length; i++) {
         // console.error(`parsed[${i}]: ${parsed[i]}`)
         controlsHtml = controlsHtml + `<button id="${parsed[i].uuid}" onclick="sendControl(event)"><pre>${escapeHtml(parsed[i].name)}</pre></button>`
       }
-      controlsHtml = controlsHtml + "</div>"
       document.getElementById('controls').innerHTML = controlsHtml
     } catch (error) {
       // assume display
       var node = document.createElement("div");
+      node.className = "display_text"
       node.textContent = ev.data
       document.getElementById('display').appendChild(node);
       setTimeout(function() {
