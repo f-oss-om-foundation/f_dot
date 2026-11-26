@@ -74,7 +74,7 @@ module FDot
           yield(new_value)
         }
       else
-        return FDot::Based::PROMPT.ask(message)
+        yield(FDot::Based::PROMPT.ask(message))
       end
     end
 

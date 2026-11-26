@@ -86,7 +86,20 @@ module FDot
         input = JSON.parse(File.read(self.path_for_file(:input)))
         raise "invalid input uuid!" unless self.instance.controls.keys.include?(input["uuid"])
 
-        self.instance.controls[input["uuid"]][:value]
+        control = self.instance.controls[input["uuid"]]
+        raise "invalid control! #{input["uuid"]}" if control.nil? || !control.kind_of?(Hash)
+
+        if control[:type].nil?
+          # :name, :value hash
+          return self.instance.controls[input["uuid"]][:value]
+        else
+          # assert input contains "new_value"
+          raise "missing new_value for #{control[:name]} control!" if input["new_value"].nil? ||
+            !input["new_value"].kind_of?(String) ||
+            input["new_value"].empty?
+
+          return input["new_value"]
+        end
       end
 
       def self.write_open_system!
