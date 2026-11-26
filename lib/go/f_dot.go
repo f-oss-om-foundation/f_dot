@@ -171,6 +171,14 @@ func javascript(w http.ResponseWriter, req *http.Request) {
   // }
 }
 
+func stylesheets(w http.ResponseWriter, req *http.Request) {
+  fileName := path.Base(req.URL.Path)
+  w.Header().Set("Content-Type", "text/css; charset=UTF-8")
+
+  http.ServeFile(w, req, pathForFilename("stylesheets/"+fileName))
+
+}
+
 func ready() {
   log.Print("got ready from f_dot")
   // send display file
@@ -201,6 +209,8 @@ func handler(wr http.ResponseWriter, req *http.Request) {
     html(wr, req)
   } else if strings.Contains(req.URL.Path, "/javascript/") {
     javascript(wr, req)
+  }  else if strings.Contains(req.URL.Path, "/stylesheets/") {
+    stylesheets(wr, req)
   }
 }
 

@@ -171,8 +171,8 @@ module FDot
       def run(force = false)
         raise "already running #{FDot.state[:program].uuid}!" if !force && !FDot.state[:program].nil?
 
-        if FDot::Based::Program.show_startup! != :start
-          FDot::Based::Processor.user_exited!
+        if FDot::Based::Program.show_startup!.to_sym != :start
+          self.class.user_exited!
         else
           FDot.state[:program] ||= FDot::Based::Program.new
           puts "loaded #{FDot.state[:program]}"

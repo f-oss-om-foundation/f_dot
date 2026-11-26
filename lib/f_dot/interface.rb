@@ -59,7 +59,6 @@ module FDot
           self.show_main_menu!
           return true
         else
-          self.reconfigure_user_space!
           return false
         end
 
@@ -90,7 +89,7 @@ module FDot
               ){|v|
                 if v == :i_am_sure
                   main_menu_open = false
-                  return FDot::Based::Processor.user_exited!
+                  FDot::Based::Processor.user_exited!
                 end
               }
             end

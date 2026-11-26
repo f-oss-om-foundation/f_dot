@@ -62,6 +62,22 @@ module FDot
       return path
     end
 
+    def self.ask(message)
+      if FDot::Based::Interface.instance.display_mode == FDot::DISPLAY_MODES[:websockets]
+        option = {
+          type: :text,
+          name: message,
+          value: nil
+        }
+        FDot::Based::Cubicus.update_with([option]) {|new_value|
+          puts new_value
+          yield(new_value)
+        }
+      else
+        return FDot::Based::PROMPT.ask(message)
+      end
+    end
+
     def self.less(message)
       if FDot::Based::Interface.instance.display_mode == FDot::DISPLAY_MODES[:websockets] ||
         !FDot::Based::Processor.user_setting!(:debug_inspectors_enabled)

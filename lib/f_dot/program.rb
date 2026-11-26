@@ -354,7 +354,8 @@ module FDot
         # puts FDot.state[:completed_programs]
 
         FDot.state[:based_uuid] = nil
-        unless FDot::Based::Program.show_startup! == :start
+        @complier_contents = nil
+        if FDot::Based::Program.show_startup!.to_sym == :start
           FDot.state[:program] = FDot::Based::Program.new
         else
           FDot::Based::Processor.user_exited!

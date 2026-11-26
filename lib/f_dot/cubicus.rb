@@ -58,16 +58,24 @@ module FDot
       end
 
       def self.run_exit_cleanup!
-        return unless FDot::Based::Interface.instance.display_mode == FDot::DISPLAY_MODES[:websocket]
+        puts __method__
+        # do not run if not using websockets
+        return unless FDot::Based::Interface.instance.display_mode == FDot::DISPLAY_MODES[:websockets]
+
+        # do not run if in one_move mode
+        if FDot::Based::Processor.instance.processing_mode == FDot::Based::Processor::MODES[:one_move]
+          FDot::Based::Processor.instance.processing_mode = FDot::Based::Processor::MODES[:default]
+          return
+        end
 
         self.write_open_system!
-        if $stdout != FDot::Based::Cubicus.instance.original_stdout
-          $stdout = FDot::Based::Cubicus.instance.original_stdout
+        system("pkill f_dot_go") # todo: daemonize
+        self.instance.ws_thread&.exit
+        self.instance.ws_thread&.kill
+        self.instance.ws_thread = nil
+        if $stdout != self.instance.original_stdout
+          $stdout = self.instance.original_stdout
         end
-        FDot::Based::Cubicus.instance.ws_thread&.exit
-        FDot::Based::Cubicus.instance.ws_thread&.kill
-        FDot::Based::Cubicus.instance.ws_thread = nil
-        system("pkill f_dot") # todo: daemonize
       end
 
       def self.read_input!
@@ -136,14 +144,21 @@ module FDot
         raise "#{go_file_path} is not a valid file path!" unless File.exist?(go_file_path)
 
         puts "ensure index.html exists in .f_dot directory:"
-        puts "(#{File.join(go_directory, "html/index.html")}, #{FDot::Based.f_dot_space_path})"
-        FileUtils.cp(File.join(go_directory, "html/index.html"), FDot::Based.f_dot_space_path)
+        puts "(#{File.join(go_directory, "index.html")}, #{FDot::Based.f_dot_space_path})"
+        FileUtils.cp(File.join(go_directory, "index.html"), FDot::Based.f_dot_space_path)
 
         puts "ensure .f_dot/javascript directory exists:"
         puts "(#{File.join(go_directory, "javascript")}, #{FDot::Based.f_dot_space_path})"
         FileUtils.cp_r(File.join(go_directory, "javascript"), FDot::Based.f_dot_space_path)
 
-        return if File.exist?(self.class.path_for_file(:f_dot_go))
+        puts "ensure .f_dot/stylesheets directory exists:"
+        puts "(#{File.join(go_directory, "stylesheets")}, #{FDot::Based.f_dot_space_path})"
+        FileUtils.cp_r(File.join(go_directory, "stylesheets"), FDot::Based.f_dot_space_path)
+
+        if File.exist?(self.class.path_for_file(:f_dot_go))
+          FileUtils.rm_rf(self.class.path_for_file(:f_dot_go))
+          FileUtils.rm_rf("#{self.class.path_for_file(:f_dot_go)}.log")
+        end
 
         puts "system(go build -o #{self.class.path_for_file(:f_dot_go)} #{go_file_path})"
         system("go build -C #{go_directory} -o #{self.class.path_for_file(:f_dot_go)} #{go_file_path}")

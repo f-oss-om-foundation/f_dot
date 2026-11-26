@@ -1,0 +1,64 @@
+#display {
+  margin-bottom: 3.7rem;
+  padding-bottom: 8px;
+  scroll-margin-bottom: 4rem;
+}
+#controls {
+  background: white;
+  overflow-x: scroll;
+  display: flex;
+  position: fixed;
+  border-top: 2px dotted darkslategrey;
+  bottom: 0;
+  left: 0;
+  right: 0;
+}
+#f_dot_menu_button {
+  -webkit-user-select: none; /* Safari */
+  user-select: none;
+  font-size: 2vw;
+  color: darkslategray;
+  position: fixed;
+  right: 4vw;
+  overflow: hidden;
+  cursor: default;
+  background: white;
+  padding: 17px;
+  border-bottom: 1px solid black;
+  border-right: 1px dotted black;
+  border-left: 1px dotted green;
+  border-top: 1px dashed gold;
+  opacity: 0.42;
+}
+#f_dot_menu_button:hover {
+  opacity: 1;
+}
+div.display_text {
+  overflow-y: auto;
+  border-left: solid 1px blue;
+  padding-left: 4px;
+}
+button, input {
+  background: transparent;
+  border: none;
+  border-left: 1px dotted purple;
+  font-weight: bolder;
+  color: black;
+}
+button:hover, button.baton {
+  background-color: darkslategray;
+  color: white;
+}
+button pre {
+  pointer-events: none;
+  background-color: transparent;
+  color: inherit;
+  padding: 4px 17px;
+}
+
+canvas {
+  position: absolute;
+  z-index: 9;
+  right: 0;
+  bottom: 0;
+}
