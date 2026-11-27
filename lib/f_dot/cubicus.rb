@@ -20,7 +20,9 @@ module FDot
         :display,
         :input,
         :f_dot_go,
-        :"index.html"
+        :"index.html",
+        :javascript,
+        :stylesheets
       ]
 
       attr_accessor :ws_thread
@@ -95,8 +97,7 @@ module FDot
         else
           # assert input contains "new_value"
           raise "missing new_value for #{control[:name]} control!" if input["new_value"].nil? ||
-            !input["new_value"].kind_of?(String) ||
-            input["new_value"].empty?
+            !input["new_value"].kind_of?(String)
 
           return input["new_value"]
         end

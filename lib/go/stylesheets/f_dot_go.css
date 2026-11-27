@@ -1,11 +1,18 @@
+html, body {
+  background: black;
+  color: white;
+  /*<thumb-color> <track-background-color>*/
+  scrollbar-color: darkslategrey black;
+}
 #display {
   margin-bottom: 3.7rem;
   padding-bottom: 8px;
   scroll-margin-bottom: 4rem;
 }
 #controls {
-  background: white;
-  overflow-x: scroll;
+  background: black;
+  overflow-x: auto;
+  scrollbar-color: darkslategrey black;
   display: flex;
   position: fixed;
   border-top: 2px dotted darkslategrey;
@@ -17,17 +24,16 @@
   -webkit-user-select: none; /* Safari */
   user-select: none;
   font-size: 2vw;
-  color: darkslategray;
+  color: white;
   position: fixed;
   right: 4vw;
   overflow: hidden;
   cursor: default;
-  background: white;
+  background: rgba(55, 55, 55, 0.55);
   padding: 17px;
   border-bottom: 1px solid black;
   border-right: 1px dotted black;
-  border-left: 1px dotted green;
-  border-top: 1px dashed gold;
+  border-left: 1px dotted rgba(0, 242, 0, 0.42);
   opacity: 0.42;
 }
 #f_dot_menu_button:hover {
@@ -35,19 +41,30 @@
 }
 div.display_text {
   overflow-y: auto;
-  border-left: solid 1px blue;
+  border-left: solid 1px rgba(0, 0, 242, 0.42);
+  border-top: dotted 1px rgba(77, 76, 76, 0.77);
+  padding-top: 8px;
+  padding-bottom: 8px;
   padding-left: 4px;
 }
-button, input {
+input {
+  width: 100%;
+  font-weight: normal;
+  color: black;
+  background: gray;
+  font-size: 1em;
+  padding: 5px;
+}
+button {
   background: transparent;
   border: none;
   border-left: 1px dotted purple;
   font-weight: bolder;
-  color: black;
+  color: white;
 }
 button:hover, button.baton {
-  background-color: darkslategray;
-  color: white;
+  background-color: lightgrey;
+  color: black;
 }
 button pre {
   pointer-events: none;
